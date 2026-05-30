@@ -13,14 +13,9 @@ describe("memory-persistence-provider", () => {
     describe("createNewWorkflow", () => { 
         let returnedId: string;
         
-        beforeEach((done) => {
+        beforeEach(async () => {
             wf1 = new WorkflowInstance();
-            return persistence.createNewWorkflow(wf1)
-                .then(id => {
-                    returnedId = id;
-                    done();
-                })
-                .catch(done.fail);            
+            returnedId = await persistence.createNewWorkflow(wf1);
         });
 
         it("should return a generated id", function() {            
