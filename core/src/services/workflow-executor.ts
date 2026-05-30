@@ -1,5 +1,5 @@
 import { injectable, inject, Container } from "inversify";
-import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor } from "../abstractions";
+import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, toError } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, WorkflowDefinition, ExecutionPointer, PointerStatus, ExecutionResult, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult } from "../models";
 
@@ -83,9 +83,10 @@ export class WorkflowExecutor implements IWorkflowExecutor {
                     this.resultProcessor.processExecutionResult(stepResult, pointer, instance, step, result);
                 }
                 catch (err) {
-                    this.logger.error("Error executing workflow %s on step %s - %o", instance.id, pointer.stepId, err);
+                    const error = toError(err);
+                    this.logger.error("Error executing workflow %s on step %s - %o", instance.id, pointer.stepId, error);
                     let perr = new ExecutionError();
-                    perr.message = err.message;
+                    perr.message = error.message;
                     perr.errorTime = new Date();
                     result.errors.push(perr);
 
@@ -96,8 +97,8 @@ export class WorkflowExecutor implements IWorkflowExecutor {
                         pointer.persistenceData._errors = [];
                     }
                     pointer.persistenceData._errors.push({
-                        message: err.message || String(err),
-                        stack: err.stack || null,
+                        message: error.message,
+                        stack: error.stack || null,
                         errorTime: new Date().toISOString(),
                         retryCount: pointer.retryCount || 0
                     });

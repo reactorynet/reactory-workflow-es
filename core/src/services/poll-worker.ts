@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 
@@ -41,7 +41,8 @@ export class PollWorker implements IBackgroundWorker {
             }
         }
         catch (err) {
-            self.logger.error("Error running poll: " + err);
+            const error = toError(err);
+            self.logger.error("Error running poll: " + error.message);
         }
 
         try {
@@ -51,7 +52,8 @@ export class PollWorker implements IBackgroundWorker {
             }
         }
         catch (err) {
-            self.logger.error("Error running poll: " + err);
+            const error = toError(err);
+            self.logger.error("Error running poll: " + error.message);
         }
     }
 }

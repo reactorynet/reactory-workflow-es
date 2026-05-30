@@ -195,9 +195,12 @@ with a sensible `message`.
 **Owner note.** Claude designs the helper + its placement; Copilot applies the mechanical sweep
 across the 13 sites; human reviews.
 
-**Copilot prompt scope:** `core/src/**/*.ts` (helper + catch sites).
-
-- [ ] Done — PR: ____
+- [x] **Done** — Claude placed the helper at `core/src/abstractions/errors.ts` (exported via the
+  abstractions barrel so providers can reuse it); Copilot CLI (Sonnet 4.6, high) swept all 11 `catch`
+  blocks across 5 service files + `.catch` arrow handlers, and added `core/spec/services/to-error.spec.ts`
+  (3 tests). 29 specs, 0 failures. Prompt: `.copilot/p1.1-to-error.prompt.md`.
+  **Verified strict-catch ready:** `tsc --noEmit --strict` reports 0 catch-variable (`unknown`) errors.
+  _Baseline for P1.4: 168 remaining strict errors, all `strictNullChecks`/`strictPropertyInitialization`._
 
 ---
 
