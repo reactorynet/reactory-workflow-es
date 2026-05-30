@@ -62,7 +62,7 @@ export class ExecutionPointerFactory implements IExecutionPointerFactory {
     }
 
     generatePointerId(): string {
-        return (Math.random() * 0x10000000000000).toString(16);
+        return crypto.randomUUID();
     }
     
 }

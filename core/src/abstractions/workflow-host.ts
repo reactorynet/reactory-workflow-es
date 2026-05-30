@@ -3,9 +3,9 @@ import { WorkflowBase, IPersistenceProvider, IQueueProvider, IDistributedLockPro
 
 export interface IWorkflowHost {
     start(): Promise<void>;
-    stop();
+    stop(): void;
     startWorkflow(id: string, version: number, data: any): Promise<string>;    
-    registerWorkflow<TData>(workflow: new () => WorkflowBase<TData>);
+    registerWorkflow<TData>(workflow: new () => WorkflowBase<TData>): void;
     publishEvent(eventName: string, eventKey: string, eventData: any, eventTime: Date): Promise<void>;
     suspendWorkflow(id: string): Promise<boolean>;
     resumeWorkflow(id: string): Promise<boolean>;

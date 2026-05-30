@@ -95,7 +95,7 @@ export class WorkflowHost implements IWorkflowHost {
         let self = this;
         try {        
             let result = false;
-            let gotLock = await self.lockProvider.aquireLock(id);
+            let gotLock = await self.lockProvider.acquireLock(id);
             
             if (gotLock) {              
                 try {
@@ -122,7 +122,7 @@ export class WorkflowHost implements IWorkflowHost {
         let self = this;
         try {        
             let result = false;
-            let gotLock = await self.lockProvider.aquireLock(id);
+            let gotLock = await self.lockProvider.acquireLock(id);
             
             if (gotLock) {              
                 try {
@@ -149,7 +149,7 @@ export class WorkflowHost implements IWorkflowHost {
         let self = this;
         try {        
             let result = false;
-            let gotLock = await self.lockProvider.aquireLock(id);
+            let gotLock = await self.lockProvider.acquireLock(id);
             
             if (gotLock) {              
                 try {

@@ -1,5 +1,5 @@
 
 export interface IDistributedLockProvider {
-    aquireLock(id: string): Promise<boolean>;
+    acquireLock(id: string): Promise<boolean>;
     releaseLock(id: string): Promise<void>;
 }

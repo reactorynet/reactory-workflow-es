@@ -1,29 +1,28 @@
-import { injectable, inject } from "inversify";
+import { injectable } from "inversify";
 import { IQueueProvider, QueueType } from "../abstractions";
-
-var processQueue: Array<string> = [];
-var publishQueue: Array<string> = [];
 
 @injectable()
 export class SingleNodeQueueProvider implements IQueueProvider {
+    private workflowQueue: string[] = [];
+    private eventQueue: string[] = [];
 
-    public async queueForProcessing(id: string, queue: any): Promise<void> {
+    public async queueForProcessing(id: string, queue: QueueType): Promise<void> {
         switch (queue) {
             case QueueType.Workflow:
-                processQueue.push(id);
+                this.workflowQueue.push(id);
                 break;
             case QueueType.Event:
-                publishQueue.push(id);
+                this.eventQueue.push(id);
                 break;
-        }        
+        }
     }
 
-    public async dequeueForProcessing(queue: any): Promise<string> {
+    public async dequeueForProcessing(queue: QueueType): Promise<string> {
         switch (queue) {
             case QueueType.Workflow:
-                return processQueue.shift();
+                return this.workflowQueue.shift();
             case QueueType.Event:
-                return publishQueue.shift();
+                return this.eventQueue.shift();
         }
     }
 }

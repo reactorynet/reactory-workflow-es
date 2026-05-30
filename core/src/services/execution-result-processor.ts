@@ -95,7 +95,7 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
     }
 
     private compensate(workflow: WorkflowInstance, definition: WorkflowDefinition, exceptionPointer: ExecutionPointer) {
-        let scope = [];
+        let scope: string[] = [];
         if (exceptionPointer.scope)
             scope = exceptionPointer.scope.slice();
         
@@ -160,7 +160,7 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
     }
 
     private shouldCompensate(workflow: WorkflowInstance, definition: WorkflowDefinition, currentPointer: ExecutionPointer): boolean {
-        let scope = [];
+        let scope: string[] = [];
         if (currentPointer.scope)
             scope = currentPointer.scope.slice();
         

@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es",
-  "version": "2.3.6-reactory.1",
+  "version": "2.3.6-reactory.2",
   "description": "A lightweight workflow engine for Node.js (Reactory fork)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
@@ -31,7 +31,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "inversify": "^4.1.0",
-    "reflect-metadata": "^0.1.10"
-  }
+    "inversify": "^6.0.0",
+    "reflect-metadata": "^0.2.0"
+  },
+  "packageManager": "yarn@4.15.0+sha512.07ec708ac11e2eaa4ea2b04cfbb272812f7e74a753f1595eaef4486c663a98306a30cca3e6fc40f7a0b168dcfb3a2490b6a5e0501e20fb69cc36f563dd161c53"
 }
