@@ -5,7 +5,6 @@ import { WorkflowQueueWorker } from "./workflow-queue-worker";
 
 import { MemoryPersistenceProvider } from "./memory-persistence-provider";
 import { SingleNodeLockProvider } from "./single-node-lock-provider";
-import { SingleNodeQueueProvider } from "./single-node-queue-provider";
 import { NullLogger } from "./null-logger";
 
 @injectable()
@@ -24,7 +23,7 @@ export class WorkflowHost implements IWorkflowHost {
     private lockProvider: IDistributedLockProvider;
     
     @inject(TYPES.IQueueProvider)
-    private queueProvider:  IQueueProvider = new SingleNodeQueueProvider();
+    private queueProvider:  IQueueProvider;
 
     @inject(TYPES.IExecutionPointerFactory)
     private pointerFactory : IExecutionPointerFactory;

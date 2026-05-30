@@ -243,3 +243,6 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+
+# npm pack / build:pack artifacts (UPGRADES P3.1) — published via CI, not committed
+*.tgz
