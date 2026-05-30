@@ -53,7 +53,7 @@ export class EventQueueWorker implements IBackgroundWorker {
 
     private async processEvent(self: EventQueueWorker, eventId: string): Promise<void> {
         try {
-            const gotLock = await self.lockProvider.aquireLock(eventId);                
+            const gotLock = await self.lockProvider.acquireLock(eventId);                
             if (gotLock) {
                 try {
                     let evt = await self.persistence.getEvent(eventId);
@@ -85,7 +85,7 @@ export class EventQueueWorker implements IBackgroundWorker {
 
     private async seedSubscription(self: EventQueueWorker, evt: Event, sub: EventSubscription): Promise<boolean> {
         
-        if (await self.lockProvider.aquireLock(sub.workflowId)) {
+        if (await self.lockProvider.acquireLock(sub.workflowId)) {
             try {
                 let workflow = await self.persistence.getWorkflowInstance(sub.workflowId);
                 let pointers = workflow.executionPointers.filter(p => p.eventName == sub.eventName && p.eventKey == sub.eventKey && !p.eventPublished);

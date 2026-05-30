@@ -18,7 +18,7 @@ export class RedisLockManager implements IDistributedLockProvider {
         this.renewTimer = setInterval(this.renewLeases, 45000, this);
     }
 
-    public async aquireLock(id: string): Promise<boolean> {
+    public async acquireLock(id: string): Promise<boolean> {
         try {
             let lock = await this.redlock.lock(id, this.leaseDuration * 1000);
             this.leases.set(id, lock);            

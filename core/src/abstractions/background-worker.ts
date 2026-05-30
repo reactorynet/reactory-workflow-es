@@ -1,5 +1,5 @@
 
 export interface IBackgroundWorker {
-    start();
-    stop();
+    start(): void;
+    stop(): void;
 }

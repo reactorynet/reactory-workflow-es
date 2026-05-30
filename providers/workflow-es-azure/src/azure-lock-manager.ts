@@ -20,7 +20,7 @@ export class AzureLockManager implements IDistributedLockProvider {
         });    
     }
 
-    public async aquireLock(id: string): Promise<boolean> {
+    public async acquireLock(id: string): Promise<boolean> {
         var self = this;
         
         if (!await this.createBlob(id))

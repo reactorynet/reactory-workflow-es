@@ -89,6 +89,19 @@ export class WorkflowExecutor implements IWorkflowExecutor {
                     perr.errorTime = new Date();
                     result.errors.push(perr);
 
+                    if (!pointer.persistenceData) {
+                        pointer.persistenceData = {};
+                    }
+                    if (!Array.isArray(pointer.persistenceData._errors)) {
+                        pointer.persistenceData._errors = [];
+                    }
+                    pointer.persistenceData._errors.push({
+                        message: err.message || String(err),
+                        stack: err.stack || null,
+                        errorTime: new Date().toISOString(),
+                        retryCount: pointer.retryCount || 0
+                    });
+
                     this.resultProcessor.handleStepException(instance, def, pointer, step);
                 }
             }

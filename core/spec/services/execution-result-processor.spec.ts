@@ -91,9 +91,9 @@ import { inspect } from "util";
 });
 
 
-function givenWorkflow(pointers): WorkflowInstance {
+function givenWorkflow(pointers: ExecutionPointer[]): WorkflowInstance {
     let result = new WorkflowInstance();
     result.status = WorkflowStatus.Runnable;
-    result.executionPointers.push(pointers);
+    result.executionPointers.push(...pointers);
     return result;
 }

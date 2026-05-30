@@ -53,7 +53,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
 
     private async processWorkflow(self: WorkflowQueueWorker, workflowId: string): Promise<void> {
         try {
-            const gotLock = await self.lockProvider.aquireLock(workflowId);                
+            const gotLock = await self.lockProvider.acquireLock(workflowId);                
             if (gotLock) {
                 let complete = false;
                 try {

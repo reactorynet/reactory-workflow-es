@@ -63,8 +63,8 @@ import { spinWaitCallback } from "../helpers/spin-wait";
         }
     }
 
-    let workflowId = null;
-    let instance = null;
+    let workflowId: string | null = null;
+    let instance: WorkflowInstance | null = null;
     let persistence = new MemoryPersistenceProvider();
     let config = configureWorkflow();
     config.useLogger(new ConsoleLogger());
