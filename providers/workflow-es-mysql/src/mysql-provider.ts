@@ -126,7 +126,7 @@ export class MySqlPersistence implements IPersistenceProvider {
                   event.eventKey = instance.eventKey;
                   event.subscribeAsOf = instance.subscribeAsOf;
 
-                  result.push
+                  result.push(event);
               }
               resolve(result);
           }
@@ -236,7 +236,7 @@ export class MySqlPersistence implements IPersistenceProvider {
               });
               var result = [];
               for (let event of events) {
-                  result.push(event["id"].toString);
+                  result.push(event["id"].toString());
               }
               resolve(result);
           }

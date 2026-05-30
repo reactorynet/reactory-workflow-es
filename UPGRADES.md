@@ -123,9 +123,10 @@ stringified id. `tsc --noEmit` clean for the package.
 **TDD.** N/A at unit level until the provider has a test harness (see P4.2). Verify via type-check +
 manual read; add coverage when the MySQL provider gets CI.
 
-**Copilot prompt scope:** `providers/workflow-es-mysql/src/mysql-provider.ts` only.
-
-- [ ] Done — PR: ____
+- [x] **Done** — fixed `:129` (`result.push(event)`) and `:239` (`.toString()`) directly (two-token
+  fixes; a Copilot round-trip adds no value since the provider cannot `yarn build`/`yarn test` until
+  P0.2/P4.2 — it still imports `workflow-es` and uses Sequelize v4 APIs). Verified by inspection;
+  build-verification deferred to **P4.2**.
 
 ---
 
