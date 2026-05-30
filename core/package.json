@@ -1,13 +1,14 @@
 {
-  "name": "workflow-es",
-  "version": "2.3.5",
-  "description": "A lightweight workflow engine for Node.js",
+  "name": "@reactorynet/workflow-es",
+  "version": "2.3.6-reactory.1",
+  "description": "A lightweight workflow engine for Node.js (Reactory fork)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
   "scripts": {
     "build": "tsc",
     "pretest": "npm run build",
-    "test": "jasmine"
+    "test": "jasmine",
+    "build:pack": "npm run build && npm pack"
   },
   "keywords": [
     "workflow",
@@ -23,11 +24,11 @@
     "url": "git+https://github.com/danielgerlag/workflow-es.git"
   },
   "devDependencies": {
-    "@types/jasmine": "^2.5.38",
-    "@types/node": "^6.0.51",
-    "jasmine": "^2.5.2",
-    "jasmine-core": "^2.4.1",
-    "typescript": "^2.2.1"
+    "@types/jasmine": "^4.6.0",
+    "@types/node": "^20.0.0",
+    "jasmine": "^5.0.0",
+    "jasmine-core": "^5.0.0",
+    "typescript": "^5.0.0"
   },
   "dependencies": {
     "inversify": "^4.1.0",

@@ -2,8 +2,7 @@ import { injectable, inject } from "inversify";
 import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, IExecutionPointerFactory } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, ExecutionPointer, PointerStatus, ExecutionResult, WorkflowDefinition, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult, EventSubscription } from "../models";
-import { worker } from "cluster";
-import { isNullOrUndefined } from "util";
+const isNullOrUndefined = (val: any): val is null | undefined => val === null || val === undefined;
 
 @injectable()
 export class ExecutionResultProcessor implements IExecutionResultProcessor {
