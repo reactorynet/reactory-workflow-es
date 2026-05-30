@@ -21,7 +21,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/danielgerlag/workflow-es.git"
+    "url": "git+https://github.com/reactorynet/reactory-workflow-es.git"
   },
   "devDependencies": {
     "@types/jasmine": "^4.6.0",
