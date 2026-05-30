@@ -163,9 +163,10 @@ the `catch (err) { err.message }` blocks read `undefined`.
 **TDD.** Add/extend a unit test asserting that executing a workflow whose definition is missing from
 the registry rejects with an `Error` (not a string). `expect(() => ...).toThrowError(Error)`.
 
-**Copilot prompt scope:** `core/src/**/*.ts`.
-
-- [ ] Done — PR: ____
+- [x] **Done** — delegated to Copilot CLI (Sonnet 4.6, high). Converted **3** string throws
+  (`workflow-executor.ts:31`, `step-builder.ts:110`, and a missed template-literal throw in
+  `workflow-queue-worker.ts:62`); added `core/spec/services/throw-error.spec.ts`. 26 specs, 0 failures.
+  Prompt: `.copilot/p0.3-throw-error.prompt.md`.
 
 ---
 
@@ -238,9 +239,7 @@ skipped.
 **TDD.** N/A — verified by build + a deliberately-broken throwaway file failing the check (then
 reverted).
 
-**Copilot prompt scope:** `core/tsconfig.json`.
-
-- [ ] Done — PR: ____
+- [x] **Done** (cd17f2e) — done directly (one-line config; not worth a Copilot round-trip).
 
 ---
 
@@ -312,9 +311,7 @@ now-unused import if nothing else uses it.
 
 **TDD.** N/A — covered by existing host scenarios.
 
-**Copilot prompt scope:** `core/src/services/workflow-host.ts`.
-
-- [ ] Done — PR: ____
+- [x] **Done** (cd17f2e) — done directly (single-line edit).
 
 ---
 
@@ -352,9 +349,7 @@ emits the artifact locally (just untracked).
 
 **TDD.** N/A.
 
-**Copilot prompt scope:** `.gitignore` + `git rm --cached core/*.tgz`.
-
-- [ ] Done — PR: ____
+- [x] **Done** (cd17f2e) — done directly (git operation).
 
 ---
 
@@ -386,9 +381,7 @@ lockfile and CI still resolves it.
 
 **TDD.** N/A — CI run is the check.
 
-**Copilot prompt scope:** repo root (`.travis.yml`, `yarn.lock`).
-
-- [ ] Done — PR: ____
+- [x] **Done** (cd17f2e) — done directly (file deletions).
 
 ---
 

@@ -59,7 +59,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                 try {
                     var instance: WorkflowInstance = await self.persistence.getWorkflowInstance(workflowId);
                     if (!instance)
-                        throw `Workflow ${workflowId} not found`;
+                        throw new Error(`Workflow ${workflowId} not found`);
 
                     if (instance.status == WorkflowStatus.Runnable) {
                         try {

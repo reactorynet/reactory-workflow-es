@@ -28,7 +28,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
 
         let def = this.registry.getDefinition(instance.workflowDefinitionId, instance.version);
         if (!def) {
-            throw "No workflow definition in registry for " + instance.workflowDefinitionId + ":" + instance.version;
+            throw new Error(`No workflow definition in registry for ${instance.workflowDefinitionId}:${instance.version}`);
         }
 
         for (let pointer of exePointers) {
