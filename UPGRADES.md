@@ -369,7 +369,9 @@ link to this UPGRADES.md for the backlog.
 
 **TDD.** N/A.
 
-- [ ] Done — PR: ____
+- [x] **Done** — removed the stale duplicate half (the pre-modernization copy referencing `workflow-es`
+  2.3.5 / `noImplicitAny: false`), keeping the current authoritative version (lines 1–282); appended a
+  pointer to this UPGRADES.md. Done directly.
 
 ---
 
