@@ -452,11 +452,15 @@ coverage of `execution-result-processor.ts` materially up.
 `spinWait` helper. For compensation, assert compensation pointers are created and the workflow
 reaches the expected terminal state.
 
-- [x] **Compensation done** (Claude) — added `core/spec/scenarios/saga-compensation.spec.ts` with two
-  scenarios: (1) basic saga compensation (inner step throws → `compensateWith` step runs once →
-  workflow completes) and (2) revert (a later failure compensates the already-completed siblings via
-  their own compensation steps). 36 specs, 0 failures. **Surfaced a likely bug — see P2.5.**
-  _Still outstanding under P4.1:_ `delay`, `schedule`, `foreach` scenario tests.
+- [x] **Done** (Claude). Added scenario coverage for all the previously-untested features:
+  - `saga-compensation.spec.ts` — basic saga compensation (inner step throws → `compensateWith` runs
+    once → workflow completes) and revert (a later failure compensates already-completed siblings via
+    their own compensation steps). **Surfaced a likely bug — see P2.5.**
+  - `foreach.spec.ts` — loop body runs once per collection item; each item exposed as `context.item`.
+  - `delay.spec.ts` — workflow sleeps on `.delay()` then resumes and completes (steps each run once).
+  - `schedule.spec.ts` — `.schedule().do()` sleeps the interval, runs the scheduled work, then the
+    post-schedule step; workflow completes.
+  43 specs, 0 failures; timing specs verified stable across repeated runs.
 
 ---
 
