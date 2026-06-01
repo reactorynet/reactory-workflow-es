@@ -339,6 +339,28 @@ is invoked once after exhaustion and the workflow lands in a terminal/known stat
 
 ---
 
+### P2.5 — Investigate post-saga double execution after compensation `[claude]`
+
+**Problem (discovered during P4.1).** In `core/spec/scenarios/saga-compensation.spec.ts` scenario 1
+(`startWith(Begin).saga(DoSomething → DoSomethingBad[throws]).compensateWith(Undo).then(SayGoodbye)`),
+the step **after** the saga (`SayGoodbye`) executes **twice** once the saga body has been compensated.
+A post-compensation step body running more than once is almost certainly a bug — likely a duplicate
+"next pointer" being created by both the normal outcome path and the compensation `resume` path in
+`execution-result-processor.ts` (`compensate()` / `processExecutionResult()`).
+
+**Spec.** Trace pointer creation during compensation; determine the intended semantics (the step after
+a compensated saga should run 0 or 1 times, not 2); fix the duplicate pointer; update the
+characterization test in `saga-compensation.spec.ts` (currently asserts the buggy value `2` with a
+tripwire comment) to the corrected expectation.
+
+**Expected outcome.** `SayGoodbye` runs at most once; the characterization assertion is updated to the
+intended value and re-labelled as a real expectation.
+
+**TDD.** The failing-on-fix characterization test already exists. Add an explicit assertion for the
+corrected count and for the number of execution pointers targeting the post-saga step.
+
+- [ ] Done — PR: ____
+
 ## P3 — Repo hygiene
 
 ### P3.1 — Stop committing build artifacts (`*.tgz`) `[copilot]`
@@ -427,10 +449,14 @@ compensation (happy path + revert/resume variants).
 coverage of `execution-result-processor.ts` materially up.
 
 **TDD.** These **are** the tests — write them to encode expected behaviour, using the existing
-`spinWaitCallback` helper. For compensation, assert compensation pointers are created and the workflow
+`spinWait` helper. For compensation, assert compensation pointers are created and the workflow
 reaches the expected terminal state.
 
-- [ ] Done — PR: ____
+- [x] **Compensation done** (Claude) — added `core/spec/scenarios/saga-compensation.spec.ts` with two
+  scenarios: (1) basic saga compensation (inner step throws → `compensateWith` step runs once →
+  workflow completes) and (2) revert (a later failure compensates the already-completed siblings via
+  their own compensation steps). 36 specs, 0 failures. **Surfaced a likely bug — see P2.5.**
+  _Still outstanding under P4.1:_ `delay`, `schedule`, `foreach` scenario tests.
 
 ---
 
