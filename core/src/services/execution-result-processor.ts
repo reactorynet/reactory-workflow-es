@@ -135,6 +135,12 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
 
             if (!isNullOrUndefined(step.compensationStepId)) {
                 pointer.status = PointerStatus.Compensated;
+                // Deactivate the compensated pointer so the normal completion path (e.g. a Sequence
+                // container detecting its children are done) does not ALSO emit its outcome — the
+                // resume block below is the single source of the post-compensation next pointer.
+                pointer.active = false;
+                if (!pointer.endTime)
+                    pointer.endTime = new Date();
 
                 let compensationPointer = this.pointerFactory.buildCompensationPointer(pointer, exceptionPointer, step.compensationStepId);
                 workflow.executionPointers.push(compensationPointer);

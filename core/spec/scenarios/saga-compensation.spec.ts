@@ -89,12 +89,11 @@ describe("saga compensation scenario", () => {
         expect(scope.undo).toBe(1);
     });
 
-    // CHARACTERIZATION (not an endorsement): the step after the saga currently runs TWICE once the
-    // saga body has been compensated. A post-compensation step body executing more than once is
-    // almost certainly an engine bug — see UPGRADES.md P2.5. This assertion locks in the observed
-    // value so that a fix (expected: 0 or 1) trips this test and forces a deliberate review.
-    it("CHARACTERIZATION: post-saga step currently executes twice after compensation (likely bug, UPGRADES P2.5)", () => {
-        expect(scope.goodbye).toBe(2);
+    // The step after a compensated saga must resume exactly once (matches the canonical workflow-es
+    // saga sample, where "Bye" prints a single time). Regression guard for UPGRADES P2.5, where it
+    // previously ran twice (the compensated Sequence container also re-emitted its outcome).
+    it("should resume into the post-saga step exactly once after compensation", () => {
+        expect(scope.goodbye).toBe(1);
     });
 
     it("should complete the workflow after compensation", () => {

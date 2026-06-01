@@ -359,7 +359,13 @@ intended value and re-labelled as a real expectation.
 **TDD.** The failing-on-fix characterization test already exists. Add an explicit assertion for the
 corrected count and for the number of execution pointers targeting the post-saga step.
 
-- [ ] Done — PR: ____
+- [x] **Done** — root cause: a compensated container pointer (the saga's `Sequence`) was marked
+  `Compensated` but left `active` with no `endTime`, so it re-emitted its outcome via the normal
+  completion path **in addition to** the compensation `resume` block — two next-pointers, hence two
+  executions. Fix in `execution-result-processor.ts`: deactivate the pointer (`active=false`,
+  set `endTime`) when marking it `Compensated`. The post-saga step now resumes exactly once
+  (matching the canonical workflow-es saga sample). Characterization test in
+  `saga-compensation.spec.ts` updated to assert `1` as a regression guard. 43 specs, 0 failures.
 
 ## P3 — Repo hygiene
 
