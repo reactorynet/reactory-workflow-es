@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 
@@ -47,7 +47,8 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
             }
         }
         catch (err) {
-            self.logger.error("Error processing workflow queue: " + err);
+            const error = toError(err);
+            self.logger.error("Error processing workflow queue: " + error.message);
         }            
     }
 
@@ -59,7 +60,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                 try {
                     var instance: WorkflowInstance = await self.persistence.getWorkflowInstance(workflowId);
                     if (!instance)
-                        throw `Workflow ${workflowId} not found`;
+                        throw new Error(`Workflow ${workflowId} not found`);
 
                     if (instance.status == WorkflowStatus.Runnable) {
                         try {
@@ -92,7 +93,8 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
             }   
         }
         catch (err) {
-            self.logger.error("Error processing workflow: " + err);
+            const error = toError(err);
+            self.logger.error("Error processing workflow: " + error.message);
         }
     }
 

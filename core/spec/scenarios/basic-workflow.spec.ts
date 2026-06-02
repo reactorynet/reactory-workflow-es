@@ -1,6 +1,6 @@
 import { configureWorkflow, WorkflowHost, WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, ConsoleLogger } from "../../src";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
-import { spinWaitCallback } from "../helpers/spin-wait";
+import { spinWait } from "../helpers/spin-wait";
 
 let basicWorkflowScope = {
      step1Ticker: 0,    
@@ -45,14 +45,14 @@ let basicWorkflowScope = {
 
      jasmine.DEFAULT_TIMEOUT_INTERVAL = 20000;
 
-     beforeAll(async (done) => {
+     beforeAll(async () => {
         host.registerWorkflow(Basic_Workflow);
         await host.start();
         workflowId = await host.startWorkflow("basic-workflow", 1, null);
-        spinWaitCallback(async () => {
+        await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return  (instance.status != WorkflowStatus.Runnable);
-        }, done);
+        });
      });
 
      afterAll(() => {

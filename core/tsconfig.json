@@ -17,9 +17,7 @@
         "node_modules"
     ],
     "include": [
+        "src/**/*.ts",
         "spec/**/*.ts"
-    ],
-    "files": [
-        "src/index.ts"
     ]
 }

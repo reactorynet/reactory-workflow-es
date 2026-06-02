@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 
@@ -47,7 +47,8 @@ export class EventQueueWorker implements IBackgroundWorker {
             }
         }
         catch (err) {
-            self.logger.error("Error processing event queue: " + err);
+            const error = toError(err);
+            self.logger.error("Error processing event queue: " + error.message);
         }            
     }
 
@@ -79,7 +80,8 @@ export class EventQueueWorker implements IBackgroundWorker {
             }   
         }
         catch (err) {
-            self.logger.error("Error processing event: " + err);
+            const error = toError(err);
+            self.logger.error("Error processing event: " + error.message);
         }
     }
 
@@ -100,7 +102,8 @@ export class EventQueueWorker implements IBackgroundWorker {
                 return true;
             }
             catch (err) {
-                self.logger.error(err);
+                const error = toError(err);
+                self.logger.error(error);
                 return false;
             }
             finally {

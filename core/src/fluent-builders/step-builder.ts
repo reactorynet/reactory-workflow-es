@@ -107,7 +107,7 @@ export class StepBuilder<TStepBody extends StepBody, TData> {
         let ancestor: any = this.iterateParents(this.step.id, stepName);
 
         if (!ancestor)
-            throw "Parent step of name " + stepName + " not found";
+            throw new Error(`Parent step of name ${stepName} not found`);
         
         return new StepBuilder<TNewStepBody, TData>(this.workflowBuilder, ancestor);
     }

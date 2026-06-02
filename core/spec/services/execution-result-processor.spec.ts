@@ -1,7 +1,6 @@
 import { configureWorkflow, WorkflowHost, WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, ConsoleLogger, ExecutionPointer, PointerStatus, StepOutcome, WorkflowStep, WorkflowExecutorResult } from "../../src";
 import { ExecutionResultProcessor } from "../../src/services/execution-result-processor";
 import { NullLogger } from "../../src/services/null-logger";
-import { spinWaitCallback } from "../helpers/spin-wait";
 import { inspect } from "util";
 
  describe("ExecutionResultProcessor", () => {

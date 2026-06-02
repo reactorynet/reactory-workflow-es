@@ -1,11 +1,10 @@
 import { injectable, inject, multiInject } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory } from "../abstractions";
+import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError } from "../abstractions";
 import { WorkflowQueueWorker } from "./workflow-queue-worker";
 
 import { MemoryPersistenceProvider } from "./memory-persistence-provider";
 import { SingleNodeLockProvider } from "./single-node-lock-provider";
-import { SingleNodeQueueProvider } from "./single-node-queue-provider";
 import { NullLogger } from "./null-logger";
 
 @injectable()
@@ -24,7 +23,7 @@ export class WorkflowHost implements IWorkflowHost {
     private lockProvider: IDistributedLockProvider;
     
     @inject(TYPES.IQueueProvider)
-    private queueProvider:  IQueueProvider = new SingleNodeQueueProvider();
+    private queueProvider:  IQueueProvider;
 
     @inject(TYPES.IExecutionPointerFactory)
     private pointerFactory : IExecutionPointerFactory;
@@ -113,7 +112,8 @@ export class WorkflowHost implements IWorkflowHost {
             return result;
         }
         catch (err) {
-            self.logger.error("Error suspending workflow: " + err);
+            const error = toError(err);
+            self.logger.error("Error suspending workflow: " + error.message);
             return false;
         }
     }
@@ -140,7 +140,8 @@ export class WorkflowHost implements IWorkflowHost {
             return result;
         }
         catch (err) {
-            self.logger.error("Error resuming workflow: " + err);
+            const error = toError(err);
+            self.logger.error("Error resuming workflow: " + error.message);
             return false;
         }
     }
@@ -165,7 +166,8 @@ export class WorkflowHost implements IWorkflowHost {
             return result;
         }
         catch (err) {
-            self.logger.error("Error terminating workflow: " + err);
+            const error = toError(err);
+            self.logger.error("Error terminating workflow: " + error.message);
             return false;
         }
     }

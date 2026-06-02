@@ -1,6 +1,6 @@
 import { WorkflowHost, WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, configureWorkflow, ConsoleLogger } from "../../src";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
-import { spinWaitCallback } from "../helpers/spin-wait";
+import { spinWait } from "../helpers/spin-wait";
 
 let outcomeForkScope = {
     taskATicker: 0,    
@@ -55,15 +55,15 @@ describe("multiple outcomes", () => {
     let host = config.getHost();
     jasmine.DEFAULT_TIMEOUT_INTERVAL = 20000;
 
-    beforeAll(async (done) => {
+    beforeAll(async () => {
         host.registerWorkflow(Outcome_Workflow);
         await host.start();
 
         workflowId = await host.startWorkflow("outcome-workflow", 1, null);
-        spinWaitCallback(async () => {
+        await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return  (instance.status != WorkflowStatus.Runnable);
-        }, done);
+        });
     });
 
     afterAll(() => {

@@ -1,6 +1,6 @@
 import { WorkflowHost, WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, configureWorkflow, ConsoleLogger } from "../../src";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
-import { spinWaitCallback, spinWait } from "../helpers/spin-wait";
+import { spinWait } from "../helpers/spin-wait";
 
  describe("external events", () => {
 
@@ -35,7 +35,7 @@ import { spinWaitCallback, spinWait } from "../helpers/spin-wait";
      let host = config.getHost();
      jasmine.DEFAULT_TIMEOUT_INTERVAL = 20000;
 
-     beforeAll(async (done) => {
+     beforeAll(async () => {
         host.registerWorkflow(Event_Workflow);
         await host.start();
 
@@ -48,10 +48,10 @@ import { spinWaitCallback, spinWait } from "../helpers/spin-wait";
 
         await host.publishEvent("my-event", "0", "Pass", new Date());
                          
-        spinWaitCallback(async () => {
+        await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return  (instance.status != WorkflowStatus.Runnable);
-        }, done);
+        });
      });
 
      afterAll(() => {
