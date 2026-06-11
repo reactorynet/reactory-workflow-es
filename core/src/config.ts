@@ -5,6 +5,7 @@ import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvi
 
 export class WorkflowConfig {
     private container: Container;
+    private allowSingleNode: boolean = false;
 
     constructor(container: Container) {
         this.container = container;
@@ -12,6 +13,16 @@ export class WorkflowConfig {
 
     public getContainer(): Container {
         return this.container;
+    }
+
+    /**
+     * Escape hatch (default false). When false, WorkflowHost.start() fails loud if a
+     * non-memory persistence provider is configured while the lock or queue is still a
+     * single-node (dev-only) default. Set true to override (e.g. a deliberate
+     * single-process deployment with a durable persistence provider). See spec C1 §6.9.
+     */
+    public allowSingleNodeProviders(allow: boolean = true) {
+        this.allowSingleNode = allow;
     }
 
     public useLogger(service: ILogger) {
@@ -31,7 +42,11 @@ export class WorkflowConfig {
     }
 
     public getHost(): IWorkflowHost {
-        return this.container.get<IWorkflowHost>(TYPES.IWorkflowHost);
+        let host = this.container.get<IWorkflowHost>(TYPES.IWorkflowHost);
+        if (typeof (host as any).setAllowSingleNodeProviders === "function") {
+            (host as any).setAllowSingleNodeProviders(this.allowSingleNode);
+        }
+        return host;
     }
 }
 

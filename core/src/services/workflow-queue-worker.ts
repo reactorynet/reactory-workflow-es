@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowConcurrencyError } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 
@@ -57,6 +57,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
             const gotLock = await self.lockProvider.acquireLock(workflowId);                
             if (gotLock) {
                 let complete = false;
+                let concurrencyConflict = false;
                 try {
                     var instance: WorkflowInstance = await self.persistence.getWorkflowInstance(workflowId);
                     if (!instance)
@@ -68,12 +69,30 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                             complete = true;
                         }
                         finally {
-                            await self.persistence.persistWorkflow(instance);                        
+                            try {
+                                await self.persistence.persistWorkflow(instance);
+                            }
+                            catch (persistErr) {
+                                if (persistErr instanceof WorkflowConcurrencyError) {
+                                    // Another node persisted this instance first. Discard our
+                                    // in-memory state, do not mark complete, and re-queue for a
+                                    // fresh load-execute-persist cycle (spec C1 §6.7).
+                                    concurrencyConflict = true;
+                                    complete = false;
+                                    self.logger.info("Concurrency conflict persisting workflow %s; re-queueing", workflowId);
+                                }
+                                else {
+                                    throw persistErr;
+                                }
+                            }
                         }
-                    }                    
+                    }
                 }
                 finally {
                     await self.lockProvider.releaseLock(workflowId);
+                    if (concurrencyConflict) {
+                        self.queueProvider.queueForProcessing(workflowId, QueueType.Workflow);
+                    }
                     if (complete) {
                         //TODO: cleanup
                         for (let sub of result.subscriptions) {

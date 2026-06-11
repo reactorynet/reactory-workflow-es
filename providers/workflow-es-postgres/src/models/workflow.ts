@@ -1,4 +1,4 @@
-import { Table, Column, Default, Model, HasMany, PrimaryKey, DataType } from 'sequelize-typescript';
+import { Table, Column, Default, Model, HasMany, PrimaryKey, DataType, AllowNull } from 'sequelize-typescript';
 import { ExecutionPointer } from './executionPointer';
 
 @Table({
@@ -45,6 +45,13 @@ export class Workflow extends Model {
 
     @Column(DataType.DATE)
     completeTime: Date;
+
+    // Optimistic-concurrency token (spec C1). Default 0; rows written before this
+    // column existed read as 0 via the default.
+    @AllowNull(false)
+    @Default(0)
+    @Column(DataType.INTEGER)
+    concurrencyToken: number;
 
     @HasMany(() => ExecutionPointer)
     executionPointers: ExecutionPointer[];

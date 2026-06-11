@@ -20,18 +20,18 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/jasmine": "^3.3.1",
-    "@types/node": "^10.12.12",
-    "jasmine": "^3.3.1",
-    "jasmine-core": "^3.3.0",
-    "typescript": "^3.2.1"
+    "@types/jasmine": "^4.6.0",
+    "@types/node": "^20.0.0",
+    "jasmine": "^5.0.0",
+    "jasmine-core": "^5.0.0",
+    "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@reactorynet/workflow-es": "file:../../core",
     "mysql2": "^1.6.4",
     "reflect-metadata": "^0.1.12",
     "sequelize": "^4.41.2",
-    "sequelize-typescript": "^0.6.6",
-    "workflow-es": "^2.3.2"
+    "sequelize-typescript": "^0.6.6"
   },
   "repository": {
     "type": "git",

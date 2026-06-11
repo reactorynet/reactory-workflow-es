@@ -1,10 +1,11 @@
 import { injectable, inject, multiInject } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError } from "../abstractions";
+import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError } from "../abstractions";
 import { WorkflowQueueWorker } from "./workflow-queue-worker";
 
 import { MemoryPersistenceProvider } from "./memory-persistence-provider";
 import { SingleNodeLockProvider } from "./single-node-lock-provider";
+import { SingleNodeQueueProvider } from "./single-node-queue-provider";
 import { NullLogger } from "./null-logger";
 
 @injectable()
@@ -31,13 +32,43 @@ export class WorkflowHost implements IWorkflowHost {
     @inject(TYPES.ILogger)
     private logger: ILogger;
 
-    public start(): Promise<void> {        
+    private allowSingleNodeProviders: boolean = false;
+
+    public setAllowSingleNodeProviders(allow: boolean): void {
+        this.allowSingleNodeProviders = allow;
+    }
+
+    public async start(): Promise<void> {
+        this.guardSingleNodeProviders();
+
         this.logger.log("Starting workflow host...");
+
+        // Mark single-node providers as started so a second host start in the same
+        // process can detect mistaken sharing of the dev-only in-memory providers.
+        if (this.lockProvider instanceof SingleNodeLockProvider) {
+            this.lockProvider.markStarted(this.allowSingleNodeProviders);
+        }
+        if (this.queueProvider instanceof SingleNodeQueueProvider) {
+            this.queueProvider.markStarted(this.allowSingleNodeProviders);
+        }
+
         for (let worker of this.workers) {
             worker.start();
         }
         this.registerCleanCallbacks();
-        return Promise.resolve(undefined);
+    }
+
+    private guardSingleNodeProviders(): void {
+        const lockIsSingleNode = this.lockProvider instanceof SingleNodeLockProvider;
+        const queueIsSingleNode = this.queueProvider instanceof SingleNodeQueueProvider;
+        const persistenceIsMemory = this.persistence.constructor.name === "MemoryPersistenceProvider";
+
+        if (!this.allowSingleNodeProviders && !persistenceIsMemory && (lockIsSingleNode || queueIsSingleNode)) {
+            throw new Error(
+                "SingleNodeLockProvider/SingleNodeQueueProvider are dev-only and cannot be shared by " +
+                "multiple workflow hosts. Use a distributed provider (e.g. @reactorynet/workflow-es-redis) " +
+                "or call configureWorkflow().allowSingleNodeProviders(true) to override.");
+        }
     }
 
     public stop() {
@@ -91,83 +122,72 @@ export class WorkflowHost implements IWorkflowHost {
 
     
     public async suspendWorkflow(id: string): Promise<boolean> {
-        let self = this;
-        try {        
-            let result = false;
-            let gotLock = await self.lockProvider.acquireLock(id);
-            
-            if (gotLock) {              
-                try {
-                    let wf = await self.persistence.getWorkflowInstance(id);
-                    if (wf.status == WorkflowStatus.Runnable) {
-                        wf.status = WorkflowStatus.Suspended;
-                        await self.persistence.persistWorkflow(wf);
-                        result = true;
-                    }
-                }   
-                finally {
-                    self.lockProvider.releaseLock(id);
-                }            
+        return this.mutateWorkflowStatus("suspending", id, (wf) => {
+            if (wf.status == WorkflowStatus.Runnable) {
+                wf.status = WorkflowStatus.Suspended;
+                return true;
             }
-            return result;
-        }
-        catch (err) {
-            const error = toError(err);
-            self.logger.error("Error suspending workflow: " + error.message);
             return false;
-        }
+        });
     }
 
     public async resumeWorkflow(id: string): Promise<boolean> {
-        let self = this;
-        try {        
-            let result = false;
-            let gotLock = await self.lockProvider.acquireLock(id);
-            
-            if (gotLock) {              
-                try {
-                    let wf = await self.persistence.getWorkflowInstance(id);
-                    if (wf.status == WorkflowStatus.Suspended) {
-                        wf.status = WorkflowStatus.Runnable;
-                        await self.persistence.persistWorkflow(wf);
-                        result = true;
-                    }
-                }   
-                finally {
-                    self.lockProvider.releaseLock(id);
-                }            
+        return this.mutateWorkflowStatus("resuming", id, (wf) => {
+            if (wf.status == WorkflowStatus.Suspended) {
+                wf.status = WorkflowStatus.Runnable;
+                return true;
             }
-            return result;
-        }
-        catch (err) {
-            const error = toError(err);
-            self.logger.error("Error resuming workflow: " + error.message);
             return false;
-        }
+        });
     }
 
     public async terminateWorkflow(id: string): Promise<boolean> {
+        return this.mutateWorkflowStatus("terminating", id, (wf) => {
+            wf.status = WorkflowStatus.Terminated;
+            return true;
+        });
+    }
+
+    /**
+     * Locked load → mutate → persist for the public control methods. On a
+     * WorkflowConcurrencyError (another node persisted first) the whole
+     * load-mutate-persist sequence is retried exactly once; a second conflict
+     * returns false (spec C1 §6.8). These methods never throw out of the public
+     * surface — any error is logged and surfaced as false.
+     */
+    private async mutateWorkflowStatus(verb: string, id: string, mutate: (wf: WorkflowInstance) => boolean): Promise<boolean> {
         let self = this;
-        try {        
-            let result = false;
+        try {
             let gotLock = await self.lockProvider.acquireLock(id);
-            
-            if (gotLock) {              
-                try {
-                    let wf = await self.persistence.getWorkflowInstance(id);                    
-                    wf.status = WorkflowStatus.Terminated;
-                    await self.persistence.persistWorkflow(wf);
-                    result = true;                    
-                }   
-                finally {
-                    self.lockProvider.releaseLock(id);
-                }            
+            if (!gotLock)
+                return false;
+
+            try {
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    let wf = await self.persistence.getWorkflowInstance(id);
+                    if (!mutate(wf))
+                        return false;
+                    try {
+                        await self.persistence.persistWorkflow(wf);
+                        return true;
+                    }
+                    catch (persistErr) {
+                        if (persistErr instanceof WorkflowConcurrencyError) {
+                            // Reload and retry the whole sequence once.
+                            continue;
+                        }
+                        throw persistErr;
+                    }
+                }
+                return false;
             }
-            return result;
+            finally {
+                self.lockProvider.releaseLock(id);
+            }
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error terminating workflow: " + error.message);
+            self.logger.error("Error " + verb + " workflow: " + error.message);
             return false;
         }
     }

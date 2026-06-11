@@ -1,5 +1,10 @@
-import { IPersistenceProvider, WorkflowInstance, EventSubscription, Event, WorkflowStatus } from "workflow-es";
-import { MongoClient, ObjectID } from "mongodb";
+import { IPersistenceProvider, WorkflowInstance, EventSubscription, Event, WorkflowStatus, WorkflowConcurrencyError } from "@reactorynet/workflow-es";
+import { MongoClient, ObjectID as BsonObjectID } from "mongodb";
+
+// The driver-v3 callable form `ObjectID(id)` is no longer in the type surface, but
+// the runtime constructor is. Wrap it so the existing call sites keep working without
+// the broader driver-v6 modernisation that C3 owns.
+const ObjectID = (id: string | number): any => new (BsonObjectID as any)(id);
 
 export class MongoDBPersistence implements IPersistenceProvider {
 
@@ -29,7 +34,8 @@ export class MongoDBPersistence implements IPersistenceProvider {
     }
 
     public async createNewWorkflow(instance: WorkflowInstance): Promise<string> {
-        var self = this;        
+        var self = this;
+        instance.concurrencyToken = 0;
         let deferred = new Promise<string>((resolve, reject) => {
             self.workflowCollection.insertOne(instance)
                 .then((err, result) => {
@@ -43,16 +49,28 @@ export class MongoDBPersistence implements IPersistenceProvider {
 
     public persistWorkflow(instance: WorkflowInstance): Promise<void> {
         var self = this;
-        let deferred = new Promise<void>((resolve, reject) => {            
+        const expected = instance.concurrencyToken ?? 0;
+        let deferred = new Promise<void>((resolve, reject) => {
             var id = ObjectID(instance.id);
             delete instance['_id'];
-            self.workflowCollection.findOneAndUpdate({ _id: id }, { $set: instance }, { returnOriginal: false }, 
-            (err, r) => {
-                if (err)
-                    reject(err);
-                resolve();
-            });
-        });        
+            // Compare-and-set: only update the doc whose stored token matches `expected`,
+            // and atomically increment it. A null result means another node wrote first.
+            const update = { ...instance } as any;
+            delete update.concurrencyToken;
+            self.workflowCollection.findOneAndUpdate(
+                { _id: id, concurrencyToken: expected },
+                { $set: update, $inc: { concurrencyToken: 1 } },
+                { returnDocument: "after" },
+                (err: any, r: any) => {
+                    if (err)
+                        return reject(err);
+                    const matched = r && (r.value !== undefined ? r.value : r);
+                    if (!matched)
+                        return reject(new WorkflowConcurrencyError(instance.id, expected));
+                    instance.concurrencyToken = expected + 1;
+                    resolve();
+                });
+        });
         return deferred;
     }
 

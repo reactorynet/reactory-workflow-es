@@ -1,6 +1,6 @@
 import { injectable, inject } from "inversify";
 import { BlobService, createBlobServiceWithSas, createBlobService, ErrorOrResult, ErrorOrResponse, ServiceResponse } from "azure-storage";
-import { IDistributedLockProvider, TYPES, ILogger } from 'workflow-es';
+import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 
 @injectable()
 export class AzureLockManager implements IDistributedLockProvider {

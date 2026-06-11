@@ -1,5 +1,5 @@
 import { injectable, inject } from "inversify";
-import { IPersistenceProvider } from "../abstractions";
+import { IPersistenceProvider, WorkflowConcurrencyError } from "../abstractions";
 import { WorkflowInstance, WorkflowStatus, EventSubscription, Event } from "../models";
 
 @injectable()
@@ -10,17 +10,37 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
     
     public async createNewWorkflow(instance: WorkflowInstance): Promise<string> {
         instance.id = this.generateUID();
-        this.instances.push(instance);
+        instance.concurrencyToken = 0;
+        this.instances.push(this.clone(instance));
         return instance.id;
     }
 
     public async persistWorkflow(instance: WorkflowInstance): Promise<void> {
+        const expected = instance.concurrencyToken ?? 0;
         const idx = this.instances.findIndex(x => x.id === instance.id);
-        this.instances[idx] = instance;
+        const stored = idx > -1 ? this.instances[idx] : undefined;
+        const storedToken = stored ? (stored.concurrencyToken ?? 0) : undefined;
+
+        // Compare-and-set: only succeed when the stored token matches the
+        // token on the in-memory instance being written. A mismatch means
+        // another node persisted this instance first — reject the stale write.
+        if (storedToken !== expected) {
+            throw new WorkflowConcurrencyError(instance.id, expected);
+        }
+
+        const next = expected + 1;
+        const copy = this.clone(instance);
+        copy.concurrencyToken = next;
+        this.instances[idx] = copy;
+        // Refresh the caller's in-memory token so it can persist again without reload.
+        instance.concurrencyToken = next;
     }
 
     public async getWorkflowInstance(workflowId: string): Promise<WorkflowInstance> {
-        return this.instances.find(x => x.id === workflowId);
+        const found = this.instances.find(x => x.id === workflowId);
+        // Return an independent copy so callers cannot mutate the stored record
+        // out-of-band, which would defeat the compare-and-set check.
+        return found ? this.clone(found) : found;
     }
 
     public async getRunnableInstances(): Promise<string[]> {
@@ -80,6 +100,13 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
 
     private generateUID(): string {
         return crypto.randomUUID();
+    }
+
+    // Deep copy so the stored record and the caller's in-memory instance are
+    // independent. structuredClone preserves Date instances (unlike JSON round-trip)
+    // and keeps the concurrency token comparison honest.
+    private clone(instance: WorkflowInstance): WorkflowInstance {
+        return structuredClone(instance);
     }
 
 }

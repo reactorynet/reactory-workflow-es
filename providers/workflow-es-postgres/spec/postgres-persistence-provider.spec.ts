@@ -1,4 +1,4 @@
-import { IPersistenceProvider, WorkflowInstance, ExecutionPointer, Event, EventSubscription, WorkflowStatus } from "@reactorynet/workflow-es";
+import { IPersistenceProvider, WorkflowInstance, ExecutionPointer, Event, EventSubscription, WorkflowStatus, WorkflowConcurrencyError } from "@reactorynet/workflow-es";
 import { PostgresPersistence } from "../src/postgres-provider";
 
 // Override with WORKFLOW_ES_PG_TEST_URL to point at a different instance.
@@ -191,6 +191,60 @@ describe("postgres-provider", () => {
             await persistence.markEventUnprocessed(ev2.id);
             const event = await persistence.getEvent(ev2.id);
             expect(event.isProcessed).toEqual(false);
+        });
+    });
+
+    // C1 optimistic-concurrency conformance.
+    describe("optimistic concurrency", () => {
+
+        async function newWorkflow(): Promise<WorkflowInstance> {
+            const wf = new WorkflowInstance();
+            wf.workflowDefinitionId = "cas-workflow";
+            wf.version = 1;
+            wf.status = WorkflowStatus.Runnable;
+            wf.nextExecution = 0;
+            wf.data = { n: 0 };
+            await persistence.createNewWorkflow(wf);
+            return wf;
+        }
+
+        it("seeds the concurrency token to 0", async () => {
+            const wf = await newWorkflow();
+            expect(wf.concurrencyToken).toEqual(0);
+            const stored = await persistence.getWorkflowInstance(wf.id);
+            expect(stored.concurrencyToken).toEqual(0);
+        });
+
+        it("increments the token on each successful persist", async () => {
+            const wf = await newWorkflow();
+            await persistence.persistWorkflow(wf);
+            expect(wf.concurrencyToken).toEqual(1);
+            await persistence.persistWorkflow(wf);
+            expect(wf.concurrencyToken).toEqual(2);
+            const stored = await persistence.getWorkflowInstance(wf.id);
+            expect(stored.concurrencyToken).toEqual(2);
+        });
+
+        it("rejects a stale write with WorkflowConcurrencyError", async () => {
+            const wf = await newWorkflow();
+            const a = await persistence.getWorkflowInstance(wf.id);
+            const b = await persistence.getWorkflowInstance(wf.id);
+
+            await persistence.persistWorkflow(a);
+            expect(a.concurrencyToken).toEqual(1);
+
+            let caught: any = null;
+            try {
+                await persistence.persistWorkflow(b);
+            } catch (err) {
+                caught = err;
+            }
+            expect(caught instanceof WorkflowConcurrencyError).toBe(true);
+            expect(caught.workflowId).toEqual(wf.id);
+            expect(caught.expectedToken).toEqual(0);
+
+            const stored = await persistence.getWorkflowInstance(wf.id);
+            expect(stored.concurrencyToken).toEqual(1);
         });
     });
 });

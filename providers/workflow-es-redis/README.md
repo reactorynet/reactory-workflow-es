@@ -2,12 +2,18 @@
 
 Provides distributed lock management and queue services on [Workflow ES](https://github.com/danielgerlag/workflow-es) using Redis.
 
+> **Package renamed.** As of `2.4.0-reactory.0` this package is published as
+> `@reactorynet/workflow-es-redis` (was `workflow-es-redis`). It targets the
+> `@reactorynet/workflow-es` core, `ioredis` v5, and `redlock` v5. The core libs
+> (`@reactorynet/workflow-es`, `inversify`, `reflect-metadata`) are now peer
+> dependencies — install them alongside this provider.
+
 ## Installing
 
-Install the npm package "workflow-es-redis"
+Install the npm package "@reactorynet/workflow-es-redis"
 
 ```
-> npm install workflow-es-redis --save
+> npm install @reactorynet/workflow-es-redis --save
 ```
 
 ## Usage

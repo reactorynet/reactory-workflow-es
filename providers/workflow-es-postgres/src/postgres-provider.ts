@@ -4,7 +4,8 @@ import {
     ExecutionPointer as CoreExecutionPointer,
     EventSubscription,
     Event as CoreEvent,
-    WorkflowStatus
+    WorkflowStatus,
+    WorkflowConcurrencyError
 } from "@reactorynet/workflow-es";
 import { Sequelize } from "sequelize-typescript";
 import { Op } from "sequelize";
@@ -47,14 +48,19 @@ export class PostgresPersistence implements IPersistenceProvider {
     }
 
     public async createNewWorkflow(instance: WorkflowInstance): Promise<string> {
+        instance.concurrencyToken = 0;
         const workflow = await Workflow.create(instance as any, { include: [ExecutionPointer] });
         instance.id = workflow.id.toString();
         return instance.id;
     }
 
     public async persistWorkflow(instance: WorkflowInstance): Promise<void> {
+        const expected = instance.concurrencyToken ?? 0;
         await this.sequelize.transaction(async (transaction) => {
-            await Workflow.update(
+            // Compare-and-set on the concurrency token. The update only matches when the
+            // stored token equals the expected token; 0 affected rows means another node
+            // wrote first, so reject (the transaction rolls back the pointer changes too).
+            const [affectedCount] = await Workflow.update(
                 {
                     workflowDefinitionId: instance.workflowDefinitionId,
                     version: instance.version,
@@ -63,10 +69,15 @@ export class PostgresPersistence implements IPersistenceProvider {
                     status: instance.status,
                     data: instance.data,
                     createTime: instance.createTime,
-                    completeTime: instance.completeTime
+                    completeTime: instance.completeTime,
+                    concurrencyToken: expected + 1
                 } as any,
-                { where: { id: instance.id }, transaction }
+                { where: { id: instance.id, concurrencyToken: expected }, transaction }
             );
+
+            if (affectedCount === 0) {
+                throw new WorkflowConcurrencyError(instance.id, expected);
+            }
 
             // Execution pointers are owned by the workflow; replace them wholesale
             // so removed/added/mutated pointers are all reflected. Pointer ids are
@@ -80,6 +91,10 @@ export class PostgresPersistence implements IPersistenceProvider {
                 await ExecutionPointer.bulkCreate(pointers as any, { transaction });
             }
         });
+
+        // Transaction committed: refresh the in-memory token so the caller can persist
+        // the same instance again without reloading.
+        instance.concurrencyToken = expected + 1;
     }
 
     public async getWorkflowInstance(workflowId: string): Promise<WorkflowInstance> {
@@ -179,6 +194,7 @@ export class PostgresPersistence implements IPersistenceProvider {
         instance.data = model.data;
         instance.createTime = model.createTime;
         instance.completeTime = model.completeTime;
+        instance.concurrencyToken = model.concurrencyToken ?? 0;
         instance.executionPointers = (model.executionPointers || []).map(
             (pointer) => this.toExecutionPointer(pointer)
         );
