@@ -74,8 +74,10 @@ export class MongoDBPersistence implements IPersistenceProvider {
         var deferred = new Promise<Array<string>>((resolve, reject) => {            
             self.workflowCollection.find({ status: WorkflowStatus.Runnable, nextExecution : { $lt: Date.now() } }, { _id: 1 })
                 .toArray((err, data) => {
-                    if (err)
-                        reject(err);
+                    if (err) {
+                        console.error("workflow-es-mongodb: getRunnableInstances query failed", err);
+                        return reject(err);
+                    }
                     var result = [];
                     for (let item of data)
                         result.push(item["_id"].toString());

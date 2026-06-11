@@ -1,0 +1,47 @@
+{
+  "name": "@reactorynet/workflow-es-postgres",
+  "version": "1.0.0-reactory.0",
+  "description": "PostgreSQL persistence provider for Workflow ES (Reactory fork)",
+  "main": "./build/src/index.js",
+  "typings": "./build/src/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:pack": "npm run build && npm pack",
+    "pretest": "npm run build",
+    "test": "jasmine"
+  },
+  "keywords": [
+    "workflow",
+    "saga",
+    "postgres",
+    "postgresql"
+  ],
+  "author": {
+    "email": "wweber@zepz.io",
+    "name": "Werner Weber"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jasmine": "^4.6.0",
+    "@types/node": "^20.0.0",
+    "@types/validator": "^13.15.10",
+    "jasmine": "^5.0.0",
+    "jasmine-core": "^5.0.0",
+    "json-stable-stringify": "^1.1.1",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@reactorynet/workflow-es": "file:../../core",
+    "pg": "^8.11.0",
+    "pg-hstore": "^2.3.4",
+    "reflect-metadata": "^0.1.13",
+    "sequelize": "^6.37.0",
+    "sequelize-typescript": "^2.1.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reactorynet/reactory-workflow-es.git",
+    "directory": "providers/workflow-es-postgres"
+  },
+  "packageManager": "yarn@4.15.0+sha512.07ec708ac11e2eaa4ea2b04cfbb272812f7e74a753f1595eaef4486c663a98306a30cca3e6fc40f7a0b168dcfb3a2490b6a5e0501e20fb69cc36f563dd161c53"
+}

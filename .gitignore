@@ -246,3 +246,5 @@ ModelManifest.xml
 
 # npm pack / build:pack artifacts (UPGRADES P3.1) — published via CI, not committed
 *.tgz
+providers/workflow-es-mongodb/.yarn/install-state.gz
+providers/workflow-es-postgres/.yarn/install-state.gz

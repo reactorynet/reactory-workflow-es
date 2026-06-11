@@ -35,6 +35,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/danielgerlag/workflow-es.git"
+    "url": "git+https://github.com/reactorynet/reactory-workflow-es.git",
+    "directory": "providers/workflow-es-redis"
   }
 }
