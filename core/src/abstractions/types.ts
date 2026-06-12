@@ -1,4 +1,4 @@
-let TYPES = {    
+let TYPES = {
     IWorkflowRegistry: Symbol("IWorkflowRegistry"),
     IWorkflowHost: Symbol("IWorkflowHost"),
     IDistributedLockProvider: Symbol("IDistributedLockProvider"),
@@ -8,7 +8,8 @@ let TYPES = {
     IBackgroundWorker: Symbol("IBackgroundWorker"),
     IWorkflowExecutor: Symbol("IWorkflowExecutor"),
     IExecutionResultProcessor: Symbol("IExecutionResultProcessor"),
-    IExecutionPointerFactory: Symbol("IExecutionPointerFactory")
+    IExecutionPointerFactory: Symbol("IExecutionPointerFactory"),
+    WorkflowOptions: Symbol("WorkflowOptions"),
 };
 
 export { TYPES };

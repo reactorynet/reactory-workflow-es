@@ -69,7 +69,7 @@ resilience for both; Phases 2–3 are operability, security, and hardening.
 | **Phase 0 — Multi-instance correctness (cloud critical path)** |
 | 1 | C1 | Working distributed lock + queue providers; optimistic concurrency | Cloud | Critical | `[claude]` | done | `specs/c1-distributed-providers.md` |
 | 2 | H2 | Close lock-release race (post-processing inside lock) | Both | High | `[claude]` | done | `specs/h2-lock-release-race.md` |
-| 3 | H3 | Lease/lock the poll worker | Cloud | High | `[claude]` | spec | `specs/h3-poll-worker-lease.md` |
+| 3 | H3 | Lease/lock the poll worker | Cloud | High | `[claude]` | done | `specs/h3-poll-worker-lease.md` |
 | 4 | H4 | Async graceful drain; SIGTERM + Electron quit handling | Both | High | `[claude]` | spec | `specs/h4-graceful-shutdown.md` |
 | 5 | H1 | Bounded concurrency / backpressure | Both | High | `[claude]` | spec | `specs/h1-bounded-concurrency.md` |
 | **Phase 1 — Durability & resilience** |

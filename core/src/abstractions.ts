@@ -13,3 +13,4 @@ export * from "./abstractions/types";
 export * from "./abstractions/execution-result-processor";
 export * from "./abstractions/execution-pointer-factory";
 export * from "./abstractions/errors";
+export * from "./abstractions/workflow-options";

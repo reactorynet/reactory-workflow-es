@@ -1,7 +1,38 @@
 import "reflect-metadata";
 import { Container, ContainerModule, interfaces, injectable, inject } from "inversify";
-import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger } from "./abstractions";
+import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS } from "./abstractions";
 import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger } from "./services";
+
+/**
+ * Resolve caller-supplied partial options against defaults, validating each field that
+ * H3 (and future items) consume. Throws synchronously at configuration time on invalid values.
+ */
+function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
+    const pollIntervalMs = partial?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    if (!Number.isInteger(pollIntervalMs) || pollIntervalMs < 1000) {
+        throw new Error(
+            `Invalid pollIntervalMs ${String(pollIntervalMs)}: must be a finite integer >= 1000 (ms).`
+        );
+    }
+
+    // Remaining fields are declared but not yet consumed by their owning workers (H1/H4/H5/H6).
+    // Defaults are applied here so the interface is stable and downstream items can wire them
+    // without changing this function's signature.
+    return {
+        pollIntervalMs,
+        workflowQueueIntervalMs: partial?.workflowQueueIntervalMs ?? 100,
+        eventQueueIntervalMs: partial?.eventQueueIntervalMs ?? 500,
+        maxConcurrentWorkflows: partial?.maxConcurrentWorkflows ?? 10,
+        maxConcurrentEvents: partial?.maxConcurrentEvents ?? 20,
+        gracefulShutdownTimeoutMs: partial?.gracefulShutdownTimeoutMs ?? 30000,
+        retry: {
+            defaultMaxRetries: partial?.retry?.defaultMaxRetries ?? 3,
+            defaultRetryIntervalMs: partial?.retry?.defaultRetryIntervalMs ?? 60000,
+            stepNotFoundRetryIntervalMs: partial?.retry?.stepNotFoundRetryIntervalMs ?? 60000,
+        },
+        dataCodecMaxBytes: partial?.dataCodecMaxBytes ?? 0,
+    };
+}
 
 export class WorkflowConfig {
     private container: Container;
@@ -50,9 +81,13 @@ export class WorkflowConfig {
     }
 }
 
-export function configureWorkflow(): WorkflowConfig {
-    let workflowModule = new ContainerModule((bind: interfaces.Bind, unbind: interfaces.Unbind) => {        
-        bind<ILogger>(TYPES.ILogger).to(NullLogger);        
+export function configureWorkflow(options?: Partial<WorkflowOptions>): WorkflowConfig {
+    const resolved = resolveOptions(options);
+
+    let workflowModule = new ContainerModule((bind: interfaces.Bind, unbind: interfaces.Unbind) => {
+        bind<WorkflowOptions>(TYPES.WorkflowOptions).toConstantValue(resolved);
+
+        bind<ILogger>(TYPES.ILogger).to(NullLogger);
         bind<IQueueProvider>(TYPES.IQueueProvider).to(SingleNodeQueueProvider).inSingletonScope();
         bind<IPersistenceProvider>(TYPES.IPersistenceProvider).to(MemoryPersistenceProvider).inSingletonScope();
         bind<IDistributedLockProvider>(TYPES.IDistributedLockProvider).to(SingleNodeLockProvider).inSingletonScope();
@@ -62,11 +97,10 @@ export function configureWorkflow(): WorkflowConfig {
         bind<IExecutionPointerFactory>(TYPES.IExecutionPointerFactory).to(ExecutionPointerFactory);
 
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(WorkflowQueueWorker);
-        bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(EventQueueWorker);        
+        bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(EventQueueWorker);
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(PollWorker);
 
         bind<IWorkflowHost>(TYPES.IWorkflowHost).to(WorkflowHost).inSingletonScope();
-        
     });
 
     let container = new Container();
