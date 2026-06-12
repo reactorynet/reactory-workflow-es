@@ -99,6 +99,10 @@ export class EventQueueWorker implements IBackgroundWorker {
                 workflow.nextExecution = 0;
                 await self.persistence.persistWorkflow(workflow);
                 await self.persistence.terminateSubscription(sub.id);
+                // H2 (spec §6.8): re-queue while still holding the workflow lock,
+                // so releaseLock (finally) is the last action; the re-queue occurs
+                // exactly when seeding succeeded.
+                await self.queueProvider.queueForProcessing(sub.workflowId, QueueType.Workflow);
                 return true;
             }
             catch (err) {
@@ -108,7 +112,6 @@ export class EventQueueWorker implements IBackgroundWorker {
             }
             finally {
                 await self.lockProvider.releaseLock(sub.workflowId);
-                self.queueProvider.queueForProcessing(sub.workflowId, QueueType.Workflow);
             }
         }
         else {
