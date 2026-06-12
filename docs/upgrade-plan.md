@@ -73,7 +73,7 @@ resilience for both; Phases 2–3 are operability, security, and hardening.
 | 4 | H4 | Async graceful drain; SIGTERM + Electron quit handling | Both | High | `[claude]` | done | `specs/h4-graceful-shutdown.md` |
 | 5 | H1 | Bounded concurrency / backpressure | Both | High | `[claude]` | done | `specs/h1-bounded-concurrency.md` |
 | **Phase 1 — Durability & resilience** |
-| 6 | C2 | Embedded SQLite/file persistence provider (Electron unlock) | Electron | Critical | `[claude]` | spec | `specs/c2-embedded-persistence.md` |
+| 6 | C2 | Embedded SQLite/file persistence provider (Electron unlock) | Electron | Critical | `[claude]` | done | `specs/c2-embedded-persistence.md` |
 | 7 | H5 | Dead-letter + configurable max retries | Both | High | `[claude]` | spec | `specs/h5-dead-letter.md` |
 | 8 | C3 | Repair or deprecate Mongo & MySQL providers | Cloud | Critical | `[copilot+review]` | spec | `specs/c3-mongo-mysql-providers.md` |
 | 9 | M7 | Provider dependency hygiene (peer-deps, package name, versions) | Cloud | Medium | `[copilot+review]` | spec | `specs/m7-provider-deps.md` |
