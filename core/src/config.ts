@@ -5,7 +5,7 @@ import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvi
 
 /**
  * Resolve caller-supplied partial options against defaults, validating each field that
- * H3 (and future items) consume. Throws synchronously at configuration time on invalid values.
+ * H1/H3 (and future items) consume. Throws synchronously at configuration time on invalid values.
  */
 function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
     const pollIntervalMs = partial?.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -15,15 +15,27 @@ function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
         );
     }
 
-    // Remaining fields are declared but not yet consumed by their owning workers (H1/H4/H5/H6).
+    // H1 — bounded queue-worker pools: caps and re-poll intervals must be finite integers >= 1.
+    const requirePositiveInteger = (field: string, value: number): number => {
+        if (!Number.isInteger(value) || value < 1) {
+            throw new Error(`Invalid ${field} ${String(value)}: must be a finite integer >= 1.`);
+        }
+        return value;
+    };
+    const workflowQueueIntervalMs = requirePositiveInteger("workflowQueueIntervalMs", partial?.workflowQueueIntervalMs ?? 100);
+    const eventQueueIntervalMs = requirePositiveInteger("eventQueueIntervalMs", partial?.eventQueueIntervalMs ?? 500);
+    const maxConcurrentWorkflows = requirePositiveInteger("maxConcurrentWorkflows", partial?.maxConcurrentWorkflows ?? 10);
+    const maxConcurrentEvents = requirePositiveInteger("maxConcurrentEvents", partial?.maxConcurrentEvents ?? 20);
+
+    // Remaining fields are declared but not yet consumed by their owning items (H5/H6).
     // Defaults are applied here so the interface is stable and downstream items can wire them
     // without changing this function's signature.
     return {
         pollIntervalMs,
-        workflowQueueIntervalMs: partial?.workflowQueueIntervalMs ?? 100,
-        eventQueueIntervalMs: partial?.eventQueueIntervalMs ?? 500,
-        maxConcurrentWorkflows: partial?.maxConcurrentWorkflows ?? 10,
-        maxConcurrentEvents: partial?.maxConcurrentEvents ?? 20,
+        workflowQueueIntervalMs,
+        eventQueueIntervalMs,
+        maxConcurrentWorkflows,
+        maxConcurrentEvents,
         // H4: 0 is permitted (force stop immediately); negative / non-finite values
         // fall back to the default at stop() time with a logged warning (spec H4 §5).
         gracefulShutdownTimeoutMs: partial?.gracefulShutdownTimeoutMs ?? DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS,

@@ -57,6 +57,19 @@ export class PollWorker implements IBackgroundWorker {
         await this.drainPromise;
     }
 
+    /**
+     * H1 (widened IBackgroundWorker): the poll worker has no bounded pool —
+     * its in-flight set holds at most one lease-gated tick. Count is reported
+     * from that same set; ticks have no item identity, so IDs are empty.
+     */
+    public getActiveCount(): number {
+        return this.inFlight.size;
+    }
+
+    public getActiveIds(): string[] {
+        return [];
+    }
+
     private tick(self: PollWorker): void {
         if (self.shuttingDown)
             return;
