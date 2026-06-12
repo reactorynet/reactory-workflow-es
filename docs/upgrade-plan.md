@@ -77,7 +77,7 @@ resilience for both; Phases 2–3 are operability, security, and hardening.
 | 7 | H5 | Dead-letter + configurable max retries | Both | High | `[claude]` | done | `specs/h5-dead-letter.md` |
 | 8 | C3 | Repair or deprecate Mongo & MySQL providers | Cloud | Critical | `[copilot+review]` | spec | `specs/c3-mongo-mysql-providers.md` |
 | 9 | M7 | Provider dependency hygiene (peer-deps, package name, versions) | Cloud | Medium | `[copilot+review]` | done | `specs/m7-provider-deps.md` |
-| 10 | M8 | Providers built + integration-tested in CI (Testcontainers) | Cloud | Medium | `[copilot+review]` | spec | `specs/m8-provider-ci.md` |
+| 10 | M8 | Providers built + integration-tested in CI (Testcontainers) | Cloud | Medium | `[copilot+review]` | done | `specs/m8-provider-ci.md` |
 | **Phase 2 — Operability & security** |
 | 11 | M5 | OpenTelemetry tracing + metrics + health endpoint | Cloud | Medium | `[claude]` | spec | `specs/m5-observability.md` |
 | 12 | M4 | Structured logging + correlation IDs | Both | Medium | `[copilot+review]` | spec | `specs/m4-structured-logging.md` |
