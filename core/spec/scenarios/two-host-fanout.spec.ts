@@ -110,9 +110,9 @@ describe("two-host fan-out (shared backend)", () => {
         });
     });
 
-    afterAll(() => {
-        hostA.stop();
-        hostB.stop();
+    afterAll(async () => {
+        await hostA.stop();
+        await hostB.stop();
     });
 
     it("two hosts run 1000 instances with zero duplicate executions", async () => {
@@ -158,7 +158,7 @@ describe("single-node providers fail loud", () => {
             caught = err;
         }
         finally {
-            host.stop();
+            await host.stop();
         }
 
         expect(caught).not.toBeNull();
@@ -188,7 +188,7 @@ describe("single-node providers fail loud", () => {
             caught = err;
         }
         finally {
-            host.stop();
+            await host.stop();
         }
 
         expect(caught).toBeNull();

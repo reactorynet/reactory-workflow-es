@@ -110,8 +110,8 @@ describe("h2 lock-release race — ordering", () => {
         lock.recording = false;
     });
 
-    afterAll(() => {
-        host.stop();
+    afterAll(async () => {
+        await host.stop();
     });
 
     it("h2: post-processing must occur before lock release", () => {
@@ -212,8 +212,8 @@ describe("h2 lock-release race — contention and idempotency", () => {
         });
     });
 
-    afterAll(() => {
-        host.stop();
+    afterAll(async () => {
+        await host.stop();
     });
 
     it("h2: a re-queued + subscribing workflow is never processed twice for the same pointer under contention", () => {
@@ -320,8 +320,8 @@ describe("h2 error path — lock released exactly once, no post-processing", () 
         lock.recording = false;
     });
 
-    afterAll(() => {
-        host.stop();
+    afterAll(async () => {
+        await host.stop();
     });
 
     it("h2: error in step still releases lock exactly once and skips post-processing", () => {

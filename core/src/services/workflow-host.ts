@@ -1,6 +1,6 @@
 import { injectable, inject, multiInject } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError } from "../abstractions";
+import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS } from "../abstractions";
 import { WorkflowQueueWorker } from "./workflow-queue-worker";
 
 import { MemoryPersistenceProvider } from "./memory-persistence-provider";
@@ -32,7 +32,21 @@ export class WorkflowHost implements IWorkflowHost {
     @inject(TYPES.ILogger)
     private logger: ILogger;
 
+    @inject(TYPES.WorkflowOptions)
+    private options: WorkflowOptions;
+
     private allowSingleNodeProviders: boolean = false;
+
+    // H4: shared stop promise — makes stop() idempotent (concurrent and
+    // repeated calls share the same drain). Reset by start() so a restarted
+    // host can be stopped again.
+    private stopPromise: Promise<void> | null = null;
+
+    // H4: the exact handler references registered on `process`, stored so
+    // stop() can removeListener the same functions (a fresh closure would be
+    // a no-op and leak the listener). Also the "registered once" guard.
+    private sigtermHandler: (() => void) | null = null;
+    private sigintHandler: (() => void) | null = null;
 
     public setAllowSingleNodeProviders(allow: boolean): void {
         this.allowSingleNodeProviders = allow;
@@ -42,6 +56,7 @@ export class WorkflowHost implements IWorkflowHost {
         this.guardSingleNodeProviders();
 
         this.logger.log("Starting workflow host...");
+        this.stopPromise = null;
 
         // Mark single-node providers as started so a second host start in the same
         // process can detect mistaken sharing of the dev-only in-memory providers.
@@ -71,12 +86,41 @@ export class WorkflowHost implements IWorkflowHost {
         }
     }
 
-    public stop() {
-        this.logger.log("Stopping workflow host...");
+    /**
+     * Graceful shutdown (spec H4). Stops intake on all workers first, then
+     * awaits their in-flight executions up to the configured
+     * `gracefulShutdownTimeoutMs` (default 30000; 0 = force stop immediately),
+     * removes the SIGTERM/SIGINT handlers registered by start(), and resolves.
+     * Idempotent: concurrent and repeated calls share the same drain promise.
+     * This is the documented hook for Electron consumers, e.g.
+     * `app.on('before-quit', async (e) => { e.preventDefault(); await host.stop(); app.exit(); })`.
+     */
+    public stop(): Promise<void> {
+        if (!this.stopPromise)
+            this.stopPromise = this.performStop();
+        return this.stopPromise;
+    }
 
-        for (let worker of this.workers) {
-            worker.stop();
+    private async performStop(): Promise<void> {
+        this.logger.log("Stopping workflow host...");
+        this.removeCleanCallbacks();
+        const timeoutMs = this.resolveGracefulShutdownTimeout();
+        await Promise.all(this.workers.map((worker) => worker.stop(timeoutMs)));
+        this.logger.log("Workflow host stopped");
+    }
+
+    /**
+     * Spec H4 §5 validation: a negative or non-finite configured timeout falls
+     * back to the default with a logged warning; 0 is permitted and means
+     * "do not wait — force stop immediately".
+     */
+    private resolveGracefulShutdownTimeout(): number {
+        const configured = this.options ? this.options.gracefulShutdownTimeoutMs : DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS;
+        if (typeof configured !== "number" || !Number.isFinite(configured) || configured < 0) {
+            this.logger.log("Invalid gracefulShutdownTimeoutMs (" + String(configured) + "); using default " + DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+            return DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS;
         }
+        return configured;
     }
     
     public async startWorkflow(id: string, version: number, data: any = {}): Promise<string> {
@@ -192,13 +236,41 @@ export class WorkflowHost implements IWorkflowHost {
         }
     }
     
+    /**
+     * Spec H4 §6.6/§6.9: register SIGTERM and SIGINT handlers exactly once per
+     * host start (guarded by the stored handler references); both fire the
+     * async stop() and never call process.exit() themselves — exit is left to
+     * the runtime / consumer. stop() removes these exact references.
+     */
     private registerCleanCallbacks() {
         let self = this;
 
-        if (typeof process !== 'undefined' && process) {
-            process.on('SIGINT', () => {
-                self.stop();
-            });
+        if (typeof process === 'undefined' || !process)
+            return;
+        if (self.sigtermHandler || self.sigintHandler)
+            return; // already registered for this host
+
+        self.sigtermHandler = () => {
+            self.stop().catch((err) => self.logger.error("Error during graceful shutdown (SIGTERM)", err));
+        };
+        self.sigintHandler = () => {
+            self.stop().catch((err) => self.logger.error("Error during graceful shutdown (SIGINT)", err));
+        };
+        process.on('SIGTERM', self.sigtermHandler);
+        process.on('SIGINT', self.sigintHandler);
+    }
+
+    private removeCleanCallbacks() {
+        if (typeof process === 'undefined' || !process)
+            return;
+
+        if (this.sigtermHandler) {
+            process.removeListener('SIGTERM', this.sigtermHandler);
+            this.sigtermHandler = null;
+        }
+        if (this.sigintHandler) {
+            process.removeListener('SIGINT', this.sigintHandler);
+            this.sigintHandler = null;
         }
     }
 

@@ -68,8 +68,8 @@ describe("foreach scenario", () => {
         });
     });
 
-    afterAll(() => {
-        host.stop();
+    afterAll(async () => {
+        await host.stop();
     });
 
     it("should complete the workflow", () => {

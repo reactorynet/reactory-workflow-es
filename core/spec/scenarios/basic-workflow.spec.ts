@@ -55,8 +55,8 @@ let basicWorkflowScope = {
         });
      });
 
-     afterAll(() => {
-         host.stop();        
+     afterAll(async () => {
+         await host.stop();        
      });
 
      it("should have an id", function() {            

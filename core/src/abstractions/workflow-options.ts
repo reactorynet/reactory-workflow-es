@@ -5,6 +5,12 @@
 export const DEFAULT_POLL_INTERVAL_MS = 10000;
 
 /**
+ * Default graceful-shutdown drain timeout in milliseconds.
+ * Used as the default value for WorkflowOptions.gracefulShutdownTimeoutMs.
+ */
+export const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS = 30000;
+
+/**
  * Well-known lease key used by the poll worker to elect a single active poller
  * per cycle via IDistributedLockProvider. Namespaced to avoid colliding with
  * per-workflow lock ids (which are workflow instance UUIDs).

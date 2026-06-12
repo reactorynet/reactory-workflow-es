@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { Container, ContainerModule, interfaces, injectable, inject } from "inversify";
-import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS } from "./abstractions";
+import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS } from "./abstractions";
 import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger } from "./services";
 
 /**
@@ -24,7 +24,9 @@ function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
         eventQueueIntervalMs: partial?.eventQueueIntervalMs ?? 500,
         maxConcurrentWorkflows: partial?.maxConcurrentWorkflows ?? 10,
         maxConcurrentEvents: partial?.maxConcurrentEvents ?? 20,
-        gracefulShutdownTimeoutMs: partial?.gracefulShutdownTimeoutMs ?? 30000,
+        // H4: 0 is permitted (force stop immediately); negative / non-finite values
+        // fall back to the default at stop() time with a logged warning (spec H4 §5).
+        gracefulShutdownTimeoutMs: partial?.gracefulShutdownTimeoutMs ?? DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS,
         retry: {
             defaultMaxRetries: partial?.retry?.defaultMaxRetries ?? 3,
             defaultRetryIntervalMs: partial?.retry?.defaultRetryIntervalMs ?? 60000,

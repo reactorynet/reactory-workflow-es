@@ -50,8 +50,8 @@ describe("delay scenario", () => {
         });
     });
 
-    afterAll(() => {
-        host.stop();
+    afterAll(async () => {
+        await host.stop();
     });
 
     it("should complete the workflow after the delay elapses", () => {

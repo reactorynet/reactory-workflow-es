@@ -3,6 +3,7 @@ import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, 
 import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
+import { drainWithTimeout } from "./drain";
 
 @injectable()
 export class EventQueueWorker implements IBackgroundWorker {
@@ -24,32 +25,63 @@ export class EventQueueWorker implements IBackgroundWorker {
 
     private processTimer: any;
 
-    public start() {        
+    // H4: tracked set of in-flight processEvent promises. stop() drains this
+    // set; H1 builds its concurrency cap on the same set (single source of truth).
+    private inFlight: Set<Promise<void>> = new Set();
+    private shuttingDown: boolean = false;
+    private drainPromise: Promise<void> | null = null;
+
+    public start() {
+        this.shuttingDown = false;
+        this.drainPromise = null;
         this.processTimer = setInterval(this.processQueue, 500, this);
     }
 
-    public stop() {
-        this.logger.log("Stopping event queue worker...");        
-        if (this.processTimer)
+    /**
+     * H4 graceful drain: stop intake first (clear the timer, gate the dequeue
+     * loop), then await all in-flight executions for up to timeoutMs, then
+     * force-resolve. Idempotent: repeated/concurrent calls share one drain.
+     */
+    public async stop(timeoutMs: number): Promise<void> {
+        if (this.shuttingDown) {
+            await (this.drainPromise ?? Promise.resolve());
+            return;
+        }
+        this.shuttingDown = true;
+        this.logger.log("Stopping event queue worker...");
+        if (this.processTimer) {
             clearInterval(this.processTimer);
+            this.processTimer = null;
+        }
+        this.drainPromise = drainWithTimeout(this.inFlight, timeoutMs);
+        await this.drainPromise;
     }
 
-    private async processQueue(self: EventQueueWorker): Promise<void> {                
+    private async processQueue(self: EventQueueWorker): Promise<void> {
         try {
+            if (self.shuttingDown)
+                return;
             let eventId = await self.queueProvider.dequeueForProcessing(QueueType.Event);
             while (eventId) {
+                if (self.shuttingDown)
+                    break;
                 self.logger.log("Dequeued event " + eventId + " for processing");
-                self.processEvent(self, eventId)
+                const id = eventId;
+                const p: Promise<void> = self.processEvent(self, id)
                     .catch((err) => {
-                        self.logger.error("Error processing event", eventId, err);
+                        self.logger.error("Error processing event", id, err);
+                    })
+                    .finally(() => {
+                        self.inFlight.delete(p);
                     });
+                self.inFlight.add(p);
                 eventId = await self.queueProvider.dequeueForProcessing(QueueType.Event);
             }
         }
         catch (err) {
             const error = toError(err);
             self.logger.error("Error processing event queue: " + error.message);
-        }            
+        }
     }
 
     private async processEvent(self: EventQueueWorker, eventId: string): Promise<void> {

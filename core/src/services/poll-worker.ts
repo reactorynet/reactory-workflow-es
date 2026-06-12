@@ -3,6 +3,7 @@ import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, 
 import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, POLL_LEASE_KEY } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
+import { drainWithTimeout } from "./drain";
 
 @injectable()
 export class PollWorker implements IBackgroundWorker {
@@ -24,14 +25,50 @@ export class PollWorker implements IBackgroundWorker {
 
     private processTimer: any;
 
+    // H4: in-flight poll ticks (at most one at a time today). Kept as a Set so
+    // the drain matches the queue workers and H1 can extend the same structure.
+    private inFlight: Set<Promise<void>> = new Set();
+    private shuttingDown: boolean = false;
+    private drainPromise: Promise<void> | null = null;
+
     public start() {
-        this.processTimer = setInterval(this.process, this.options.pollIntervalMs, this);
+        this.shuttingDown = false;
+        this.drainPromise = null;
+        this.processTimer = setInterval(this.tick, this.options.pollIntervalMs, this);
     }
 
-    public stop() {
+    /**
+     * H4 graceful drain: stop intake first (clear the timer, gate the tick),
+     * then await any in-flight poll cycle for up to timeoutMs, then
+     * force-resolve. Idempotent: repeated/concurrent calls share one drain.
+     */
+    public async stop(timeoutMs: number): Promise<void> {
+        if (this.shuttingDown) {
+            await (this.drainPromise ?? Promise.resolve());
+            return;
+        }
+        this.shuttingDown = true;
         this.logger.log("Stopping poll worker...");
-        if (this.processTimer)
+        if (this.processTimer) {
             clearInterval(this.processTimer);
+            this.processTimer = null;
+        }
+        this.drainPromise = drainWithTimeout(this.inFlight, timeoutMs);
+        await this.drainPromise;
+    }
+
+    private tick(self: PollWorker): void {
+        if (self.shuttingDown)
+            return;
+        const p: Promise<void> = self.process(self)
+            .catch((err) => {
+                const error = toError(err);
+                self.logger.error("Error running poll: " + error.message);
+            })
+            .finally(() => {
+                self.inFlight.delete(p);
+            });
+        self.inFlight.add(p);
     }
 
     private async process(self: PollWorker): Promise<void> {
