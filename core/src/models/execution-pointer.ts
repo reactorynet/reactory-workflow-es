@@ -30,5 +30,6 @@ export var PointerStatus = {
     Sleeping: 4,
     WaitingForEvent: 5,
     Failed: 6,
-    Compensated: 7
+    Compensated: 7,
+    DeadLettered: 8
 }

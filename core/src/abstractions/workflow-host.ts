@@ -1,5 +1,6 @@
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription } from "../models";
 import { WorkflowBase, IPersistenceProvider, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger } from "../abstractions";
+import { LifecycleEvent } from "./lifecycle-events";
 
 export interface IWorkflowHost {
     start(): Promise<void>;
@@ -18,4 +19,11 @@ export interface IWorkflowHost {
     suspendWorkflow(id: string): Promise<boolean>;
     resumeWorkflow(id: string): Promise<boolean>;
     terminateWorkflow(id: string): Promise<boolean>;
+    /**
+     * H5 — subscribe to engine lifecycle events (currently only
+     * `workflow.dead-lettered`). Handlers are invoked synchronously and
+     * best-effort: a throwing handler is swallowed and never affects engine
+     * state. Delegates to the injected ILifecycleEventHub.
+     */
+    onLifecycleEvent(handler: (evt: LifecycleEvent) => void): void;
 }

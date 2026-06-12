@@ -1,6 +1,6 @@
 import { injectable, inject, multiInject } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS } from "../abstractions";
+import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent } from "../abstractions";
 import { WorkflowQueueWorker } from "./workflow-queue-worker";
 
 import { MemoryPersistenceProvider } from "./memory-persistence-provider";
@@ -35,6 +35,9 @@ export class WorkflowHost implements IWorkflowHost {
     @inject(TYPES.WorkflowOptions)
     private options: WorkflowOptions;
 
+    @inject(TYPES.ILifecycleEventHub)
+    private lifecycle: ILifecycleEventHub;
+
     private allowSingleNodeProviders: boolean = false;
 
     // H4: shared stop promise — makes stop() idempotent (concurrent and
@@ -50,6 +53,14 @@ export class WorkflowHost implements IWorkflowHost {
 
     public setAllowSingleNodeProviders(allow: boolean): void {
         this.allowSingleNodeProviders = allow;
+    }
+
+    /**
+     * H5 — subscribe to engine lifecycle events (currently only
+     * `workflow.dead-lettered`). Delegates to the injected ILifecycleEventHub.
+     */
+    public onLifecycleEvent(handler: (evt: LifecycleEvent) => void): void {
+        this.lifecycle.on(handler);
     }
 
     public async start(): Promise<void> {

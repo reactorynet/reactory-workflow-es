@@ -1,5 +1,5 @@
 import { injectable, inject, Container } from "inversify";
-import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, toError } from "../abstractions";
+import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, toError, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, WorkflowDefinition, ExecutionPointer, PointerStatus, ExecutionResult, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult } from "../models";
 
@@ -14,6 +14,12 @@ export class WorkflowExecutor implements IWorkflowExecutor {
 
     @inject(TYPES.ILogger)
     private logger : ILogger;
+
+    @inject(TYPES.WorkflowOptions)
+    private options : WorkflowOptions;
+
+    @inject(TYPES.ILifecycleEventHub)
+    private lifecycle : ILifecycleEventHub;
 
     @inject(Container)
     private container : Container;
@@ -108,13 +114,56 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             }
             else {
                 this.logger.error("Could not find step on workflow %s %s", instance.id, pointer.stepId);
-                pointer.sleepUntil = (Date.now() + 60000); //todo: make configurable
+                // H5 (spec h5 §6.9): bounded, configurable. There is no step object to read
+                // maxRetries from, so the global default budget applies; on exhaustion the
+                // workflow dead-letters exactly as the Retry path does (spec h5 §6.5).
+                if (pointer.retryCount >= this.options.retry.defaultMaxRetries) {
+                    this.deadLetter(instance, pointer, this.options.retry.defaultMaxRetries);
+                }
+                else {
+                    pointer.sleepUntil = (Date.now() + this.options.retry.stepNotFoundRetryIntervalMs);
+                    pointer.retryCount++;
+                }
             }
         }
 
         this.processAfterExecutionIteration(instance, def, result);
         this.determineNextExecutionTime(instance);
         return result;
+    }
+
+    /**
+     * H5 (spec h5 §6.5/§6.9): terminal give-up action for the step-not-found path —
+     * retire the pointer, move the workflow out of Runnable, emit exactly one
+     * `workflow.dead-lettered` lifecycle event.
+     */
+    private deadLetter(workflow: WorkflowInstance, pointer: ExecutionPointer, maxRetries: number) {
+        pointer.active = false;
+        pointer.status = PointerStatus.DeadLettered;
+        if (!pointer.endTime)
+            pointer.endTime = new Date();
+        workflow.status = WorkflowStatus.DeadLettered;
+
+        const errors = pointer.persistenceData && Array.isArray(pointer.persistenceData._errors)
+            ? pointer.persistenceData._errors
+            : [];
+        const lastError = errors.length > 0 ? errors[errors.length - 1] : null;
+
+        const evt: WorkflowDeadLetteredEvent = {
+            event: WORKFLOW_DEAD_LETTERED as "workflow.dead-lettered",
+            workflowId: workflow.id,
+            workflowDefinitionId: workflow.workflowDefinitionId,
+            version: workflow.version,
+            pointerId: pointer.id,
+            stepId: pointer.stepId,
+            retryCount: pointer.retryCount,
+            maxRetries: maxRetries,
+            errorMessage: lastError && lastError.message ? lastError.message : null,
+            deadLetteredAt: new Date().toISOString()
+        };
+
+        this.logger.error("Workflow %s dead-lettered on step %s after %s retries (maxRetries %s)", workflow.id, pointer.stepId, pointer.retryCount, maxRetries);
+        this.lifecycle.emit(evt);
     }
 
     processAfterExecutionIteration(workflow: WorkflowInstance, defintion: WorkflowDefinition, workflowResult: WorkflowExecutorResult) {
@@ -131,6 +180,11 @@ export class WorkflowExecutor implements IWorkflowExecutor {
         instance.nextExecution = null;
 
         if (instance.status == WorkflowStatus.Complete)
+            return;
+
+        // H5 (spec h5 §6.10): a dead-lettered instance is terminal — never schedule it
+        // again, and never let the "all pointers ended" branch below flip it to Complete.
+        if (instance.status == WorkflowStatus.DeadLettered)
             return;
 
         for (let pointer of instance.executionPointers.filter(x => x.active && x.children.length == 0)) {

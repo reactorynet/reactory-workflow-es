@@ -1,5 +1,5 @@
 import { injectable, inject } from "inversify";
-import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, IExecutionPointerFactory } from "../abstractions";
+import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, IExecutionPointerFactory, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, ExecutionPointer, PointerStatus, ExecutionResult, WorkflowDefinition, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult, EventSubscription } from "../models";
 const isNullOrUndefined = (val: any): val is null | undefined => val === null || val === undefined;
@@ -12,7 +12,13 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
 
     @inject(TYPES.ILogger)
     private logger : ILogger;
-        
+
+    @inject(TYPES.WorkflowOptions)
+    private options : WorkflowOptions;
+
+    @inject(TYPES.ILifecycleEventHub)
+    private lifecycle : ILifecycleEventHub;
+
     public processExecutionResult(stepResult: ExecutionResult, pointer: ExecutionPointer, instance: WorkflowInstance, step: WorkflowStepBase, workflowResult: WorkflowExecutorResult) {
 
         pointer.persistenceData = stepResult.persistenceData;
@@ -71,12 +77,20 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
     }
 
     private selectErrorStrategy(errorOption: number, workflow: WorkflowInstance, definition: WorkflowDefinition, pointer: ExecutionPointer, step: WorkflowStepBase) {
-        
+
         switch (errorOption) {
-            case WorkflowErrorHandling.Retry:
-                pointer.sleepUntil = (Date.now() + step.retryInterval);
+            case WorkflowErrorHandling.Retry: {
+                // H5 (spec h5 §6.1/.2): finite retry budget — maxRetries is the number of
+                // re-tries allowed AFTER the first attempt (total attempts = maxRetries + 1).
+                const maxRetries = this.resolveMaxRetries(step, definition);
+                if (pointer.retryCount >= maxRetries) {
+                    this.deadLetter(workflow, pointer, maxRetries);
+                    return; // terminal: skip retryCount++ (spec h5 §6.5)
+                }
+                pointer.sleepUntil = (Date.now() + this.resolveRetryInterval(step));
                 step.primeForRetry(pointer);
                 break;
+            }
             case WorkflowErrorHandling.Suspend:
                 workflow.status = WorkflowStatus.Suspended;
                 break;
@@ -86,12 +100,72 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
             case WorkflowErrorHandling.Compensate:
                 this.compensate(workflow, definition, pointer);
                 break;
-            default:
-                pointer.sleepUntil = (Date.now() + 60000);
+            default: {
+                // H5 (spec h5 §6.4): unrecognised errorBehavior is budgeted like Retry,
+                // using the configured default interval (replaces the 60000 literal).
+                const maxRetries = this.resolveMaxRetries(step, definition);
+                if (pointer.retryCount >= maxRetries) {
+                    this.deadLetter(workflow, pointer, maxRetries);
+                    return;
+                }
+                pointer.sleepUntil = (Date.now() + this.options.retry.defaultRetryIntervalMs);
                 break;
+            }
         }
 
         pointer.retryCount++;
+    }
+
+    /**
+     * H5 (spec h5 §5.2): maxRetries precedence — step → definition → WorkflowOptions.retry.defaultMaxRetries.
+     */
+    private resolveMaxRetries(step: WorkflowStepBase, definition: WorkflowDefinition): number {
+        return step.maxRetries ?? definition.maxRetries ?? this.options.retry.defaultMaxRetries;
+    }
+
+    /**
+     * H5 (spec h5 §6.3): step.retryInterval if it is a finite number > 0, else the configured
+     * default. Fixes the latent `Date.now() + null` bug when onError(Retry) is called with no interval.
+     */
+    private resolveRetryInterval(step: WorkflowStepBase): number {
+        if (typeof step.retryInterval === "number" && Number.isFinite(step.retryInterval) && step.retryInterval > 0)
+            return step.retryInterval;
+        return this.options.retry.defaultRetryIntervalMs;
+    }
+
+    /**
+     * H5 (spec h5 §6.5): terminal give-up action — retire the pointer, move the whole
+     * workflow out of Runnable (mirrors Suspended/Terminated, so the queue worker and
+     * getRunnableInstances() stop picking it up), and emit exactly one
+     * `workflow.dead-lettered` lifecycle event.
+     */
+    private deadLetter(workflow: WorkflowInstance, pointer: ExecutionPointer, maxRetries: number) {
+        pointer.active = false;
+        pointer.status = PointerStatus.DeadLettered;
+        if (!pointer.endTime)
+            pointer.endTime = new Date();
+        workflow.status = WorkflowStatus.DeadLettered;
+
+        const errors = pointer.persistenceData && Array.isArray(pointer.persistenceData._errors)
+            ? pointer.persistenceData._errors
+            : [];
+        const lastError = errors.length > 0 ? errors[errors.length - 1] : null;
+
+        const evt: WorkflowDeadLetteredEvent = {
+            event: WORKFLOW_DEAD_LETTERED as "workflow.dead-lettered",
+            workflowId: workflow.id,
+            workflowDefinitionId: workflow.workflowDefinitionId,
+            version: workflow.version,
+            pointerId: pointer.id,
+            stepId: pointer.stepId,
+            retryCount: pointer.retryCount,
+            maxRetries: maxRetries,
+            errorMessage: lastError && lastError.message ? lastError.message : null,
+            deadLetteredAt: new Date().toISOString()
+        };
+
+        this.logger.error("Workflow %s dead-lettered on step %s after %s retries (maxRetries %s)", workflow.id, pointer.stepId, pointer.retryCount, maxRetries);
+        this.lifecycle.emit(evt);
     }
 
     private compensate(workflow: WorkflowInstance, definition: WorkflowDefinition, exceptionPointer: ExecutionPointer) {

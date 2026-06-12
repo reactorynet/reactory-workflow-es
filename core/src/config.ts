@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { Container, ContainerModule, interfaces, injectable, inject } from "inversify";
-import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS } from "./abstractions";
-import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger } from "./services";
+import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent } from "./abstractions";
+import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger, LifecycleEventHub } from "./services";
 
 /**
  * Resolve caller-supplied partial options against defaults, validating each field that
@@ -27,7 +27,16 @@ function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
     const maxConcurrentWorkflows = requirePositiveInteger("maxConcurrentWorkflows", partial?.maxConcurrentWorkflows ?? 10);
     const maxConcurrentEvents = requirePositiveInteger("maxConcurrentEvents", partial?.maxConcurrentEvents ?? 20);
 
-    // Remaining fields are declared but not yet consumed by their owning items (H5/H6).
+    // H5 — retry budget and intervals (consumed by ExecutionResultProcessor / WorkflowExecutor).
+    // maxRetries counts retries AFTER the first attempt, so 0 (fail fast, no retries) is valid.
+    const defaultMaxRetries = partial?.retry?.defaultMaxRetries ?? 3;
+    if (!Number.isInteger(defaultMaxRetries) || defaultMaxRetries < 0) {
+        throw new Error(`Invalid retry.defaultMaxRetries ${String(defaultMaxRetries)}: must be a finite integer >= 0.`);
+    }
+    const defaultRetryIntervalMs = requirePositiveInteger("retry.defaultRetryIntervalMs", partial?.retry?.defaultRetryIntervalMs ?? 60000);
+    const stepNotFoundRetryIntervalMs = requirePositiveInteger("retry.stepNotFoundRetryIntervalMs", partial?.retry?.stepNotFoundRetryIntervalMs ?? 60000);
+
+    // Remaining fields are declared but not yet consumed by their owning items (H6).
     // Defaults are applied here so the interface is stable and downstream items can wire them
     // without changing this function's signature.
     return {
@@ -40,9 +49,9 @@ function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
         // fall back to the default at stop() time with a logged warning (spec H4 §5).
         gracefulShutdownTimeoutMs: partial?.gracefulShutdownTimeoutMs ?? DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS,
         retry: {
-            defaultMaxRetries: partial?.retry?.defaultMaxRetries ?? 3,
-            defaultRetryIntervalMs: partial?.retry?.defaultRetryIntervalMs ?? 60000,
-            stepNotFoundRetryIntervalMs: partial?.retry?.stepNotFoundRetryIntervalMs ?? 60000,
+            defaultMaxRetries,
+            defaultRetryIntervalMs,
+            stepNotFoundRetryIntervalMs,
         },
         dataCodecMaxBytes: partial?.dataCodecMaxBytes ?? 0,
     };
@@ -82,8 +91,25 @@ export class WorkflowConfig {
         this.container.rebind<IQueueProvider>(TYPES.IQueueProvider).toConstantValue(service);
     }
 
-    public useLockManager(service: IDistributedLockProvider) {        
-        this.container.rebind<IDistributedLockProvider>(TYPES.IDistributedLockProvider).toConstantValue(service);        
+    public useLockManager(service: IDistributedLockProvider) {
+        this.container.rebind<IDistributedLockProvider>(TYPES.IDistributedLockProvider).toConstantValue(service);
+    }
+
+    /**
+     * H5 — swap the lifecycle event hub implementation (plan §8.1: an implementation
+     * gets a useX() setter). The default LifecycleEventHub is a no-op until a handler
+     * is registered.
+     */
+    public useLifecycleEventHub(service: ILifecycleEventHub) {
+        this.container.rebind<ILifecycleEventHub>(TYPES.ILifecycleEventHub).toConstantValue(service);
+    }
+
+    /**
+     * H5 — convenience: subscribe a handler to engine lifecycle events
+     * (currently only `workflow.dead-lettered`) on the bound hub.
+     */
+    public onLifecycleEvent(handler: (evt: LifecycleEvent) => void) {
+        this.container.get<ILifecycleEventHub>(TYPES.ILifecycleEventHub).on(handler);
     }
 
     public getHost(): IWorkflowHost {
@@ -109,6 +135,7 @@ export function configureWorkflow(options?: Partial<WorkflowOptions>): WorkflowC
         bind<IWorkflowExecutor>(TYPES.IWorkflowExecutor).to(WorkflowExecutor);
         bind<IExecutionResultProcessor>(TYPES.IExecutionResultProcessor).to(ExecutionResultProcessor);
         bind<IExecutionPointerFactory>(TYPES.IExecutionPointerFactory).to(ExecutionPointerFactory);
+        bind<ILifecycleEventHub>(TYPES.ILifecycleEventHub).to(LifecycleEventHub).inSingletonScope();
 
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(WorkflowQueueWorker);
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(EventQueueWorker);

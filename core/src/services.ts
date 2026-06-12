@@ -12,3 +12,4 @@ export * from "./services/poll-worker";
 export * from "./services/workflow-registry";
 export * from "./services/execution-result-processor";
 export * from "./services/execution-pointer-factory";
+export * from "./services/lifecycle-events";

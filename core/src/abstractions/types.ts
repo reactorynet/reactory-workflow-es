@@ -10,6 +10,7 @@ let TYPES = {
     IExecutionResultProcessor: Symbol("IExecutionResultProcessor"),
     IExecutionPointerFactory: Symbol("IExecutionPointerFactory"),
     WorkflowOptions: Symbol("WorkflowOptions"),
+    ILifecycleEventHub: Symbol("ILifecycleEventHub"),
 };
 
 export { TYPES };
