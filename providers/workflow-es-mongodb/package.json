@@ -20,6 +20,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@reactorynet/workflow-es": "file:../../core",
     "@types/jasmine": "^4.6.0",
     "@types/mongodb": "^3.6.20",
     "@types/node": "^20.0.0",
@@ -27,12 +28,14 @@
     "jasmine-core": "^5.0.0",
     "typescript": "^5.0.0"
   },
+  "peerDependencies": {
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "inversify": "^6.0.0",
+    "reflect-metadata": "^0.2.0"
+  },
   "dependencies": {
-    "@reactorynet/workflow-es": "file:../../core",
-    "inversify": "^4.1.0",
     "json-stable-stringify": "^1.0.1",
-    "mongodb": "^3.2.7",
-    "reflect-metadata": "^0.1.10"
+    "mongodb": "^3.2.7"
   },
   "repository": {
     "type": "git",

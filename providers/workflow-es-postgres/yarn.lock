@@ -65,20 +65,24 @@ __metadata:
     json-stable-stringify: "npm:^1.1.1"
     pg: "npm:^8.11.0"
     pg-hstore: "npm:^2.3.4"
-    reflect-metadata: "npm:^0.1.13"
+    reflect-metadata: "npm:^0.2.0"
     sequelize: "npm:^6.37.0"
     sequelize-typescript: "npm:^2.1.6"
     typescript: "npm:^5.0.0"
+  peerDependencies:
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0"
+    inversify: ^6.0.0
+    reflect-metadata: ^0.2.0
   languageName: unknown
   linkType: soft
 
 "@reactorynet/workflow-es@file:../../core::locator=%40reactorynet%2Fworkflow-es-postgres%40workspace%3A.":
-  version: 2.3.6-reactory.3
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=c1be40&locator=%40reactorynet%2Fworkflow-es-postgres%40workspace%3A."
+  version: 2.4.0-reactory.0
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=60e9e3&locator=%40reactorynet%2Fworkflow-es-postgres%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/3416b3bfbf9b1bfb9a1578d7fc20fa78a28c042b773b2b29753553785a2a9d2a41f27b8887b30f9d2b06525c019009c9bc732c1309ae3a68e133a3bae71a106f
+  checksum: 10c0/ac6131737e45e7bbefa972d8ed618cc40fd422a09f60bdf34875d98e29dd08e5115c6a065143699fdf97cc269cefef687d980cd4a6c36e65dff806f20ab7b2a1
   languageName: node
   linkType: hard
 
@@ -817,13 +821,6 @@ __metadata:
   dependencies:
     xtend: "npm:^4.0.0"
   checksum: 10c0/c1734c3cb79e7f22579af0b268a463b1fa1d084e742a02a7a290c4f041e349456f3bee3b4ee0bb3f226828597f7b76deb615c1b857db9a742c45520100456272
-  languageName: node
-  linkType: hard
-
-"reflect-metadata@npm:^0.1.13":
-  version: 0.1.14
-  resolution: "reflect-metadata@npm:0.1.14"
-  checksum: 10c0/3a6190c7f6cb224f26a012d11f9e329360c01c1945e2cbefea23976a8bacf9db6b794aeb5bf18adcb673c448a234fbc06fc41853c00a6c206b30f0777ecf019e
   languageName: node
   linkType: hard
 

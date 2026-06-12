@@ -23,7 +23,9 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@reactorynet/workflow-es": ">=2.4.0-reactory.0"
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "inversify": "^6.0.0",
+    "reflect-metadata": "^0.2.0"
   },
   "devDependencies": {
     "@reactorynet/workflow-es": "file:../../core",
@@ -31,10 +33,10 @@
     "@types/node": "^20.0.0",
     "jasmine": "^5.0.0",
     "jasmine-core": "^5.0.0",
+    "reflect-metadata": "^0.2.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "reflect-metadata": "^0.2.0",
     "sequelize": "^6.37.0",
     "sequelize-typescript": "^2.1.6",
     "sqlite3": "^5.1.0"

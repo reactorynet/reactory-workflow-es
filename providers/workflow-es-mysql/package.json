@@ -20,16 +20,21 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@reactorynet/workflow-es": "file:../../core",
     "@types/jasmine": "^4.6.0",
     "@types/node": "^20.0.0",
     "jasmine": "^5.0.0",
     "jasmine-core": "^5.0.0",
+    "reflect-metadata": "^0.2.0",
     "typescript": "^5.0.0"
   },
+  "peerDependencies": {
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "inversify": "^6.0.0",
+    "reflect-metadata": "^0.2.0"
+  },
   "dependencies": {
-    "@reactorynet/workflow-es": "file:../../core",
     "mysql2": "^1.6.4",
-    "reflect-metadata": "^0.1.12",
     "sequelize": "^4.41.2",
     "sequelize-typescript": "^0.6.6"
   },

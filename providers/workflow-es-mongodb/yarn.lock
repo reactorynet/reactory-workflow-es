@@ -53,12 +53,12 @@ __metadata:
   linkType: hard
 
 "@reactorynet/workflow-es@file:../../core::locator=workflow-es-mongodb%40workspace%3A.":
-  version: 2.3.6-reactory.3
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=c1be40&locator=workflow-es-mongodb%40workspace%3A."
+  version: 2.4.0-reactory.0
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=9579fc&locator=workflow-es-mongodb%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/3416b3bfbf9b1bfb9a1578d7fc20fa78a28c042b773b2b29753553785a2a9d2a41f27b8887b30f9d2b06525c019009c9bc732c1309ae3a68e133a3bae71a106f
+  checksum: 10c0/01bfbfce2a1a066bde0ae0e1596b4429dc66b24b1f4abc189fb8d136108d0e8c49df91f4c2e74da583425d5d8f0a64ba9f5a8c7ce995346f429f31149286e985
   languageName: node
   linkType: hard
 
@@ -432,13 +432,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"inversify@npm:^4.1.0":
-  version: 4.13.0
-  resolution: "inversify@npm:4.13.0"
-  checksum: 10c0/2dc1dcf07d32c61d021a92344ce91f9e6f66e9cd0aa2ab41ea746e8f75a98e5dbffdbd5a0d7b2b536cc124a05f302aca8e6074d3e6a476b4d8c10178ffc541a6
-  languageName: node
-  linkType: hard
-
 "inversify@npm:^6.0.0":
   version: 6.2.2
   resolution: "inversify@npm:6.2.2"
@@ -660,13 +653,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"reflect-metadata@npm:^0.1.10":
-  version: 0.1.14
-  resolution: "reflect-metadata@npm:0.1.14"
-  checksum: 10c0/3a6190c7f6cb224f26a012d11f9e329360c01c1945e2cbefea23976a8bacf9db6b794aeb5bf18adcb673c448a234fbc06fc41853c00a6c206b30f0777ecf019e
-  languageName: node
-  linkType: hard
-
 "reflect-metadata@npm:^0.2.0":
   version: 0.2.2
   resolution: "reflect-metadata@npm:0.2.2"
@@ -859,13 +845,15 @@ __metadata:
     "@types/jasmine": "npm:^4.6.0"
     "@types/mongodb": "npm:^3.6.20"
     "@types/node": "npm:^20.0.0"
-    inversify: "npm:^4.1.0"
     jasmine: "npm:^5.0.0"
     jasmine-core: "npm:^5.0.0"
     json-stable-stringify: "npm:^1.0.1"
     mongodb: "npm:^3.2.7"
-    reflect-metadata: "npm:^0.1.10"
     typescript: "npm:^5.0.0"
+  peerDependencies:
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0"
+    inversify: ^6.0.0
+    reflect-metadata: ^0.2.0
   languageName: unknown
   linkType: soft
 
