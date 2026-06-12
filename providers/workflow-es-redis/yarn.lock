@@ -82,11 +82,11 @@ __metadata:
 
 "@reactorynet/workflow-es@file:../../core::locator=%40reactorynet%2Fworkflow-es-redis%40workspace%3A.":
   version: 2.4.0-reactory.0
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=9579fc&locator=%40reactorynet%2Fworkflow-es-redis%40workspace%3A."
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=545d1b&locator=%40reactorynet%2Fworkflow-es-redis%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/01bfbfce2a1a066bde0ae0e1596b4429dc66b24b1f4abc189fb8d136108d0e8c49df91f4c2e74da583425d5d8f0a64ba9f5a8c7ce995346f429f31149286e985
+  checksum: 10c0/61303a9d6d281a9254afa0ccc66180d3e29d6f947015bb641fad1fa51ee2a3d836fd8256e9f01858c86a5bd5efefe43f8b197fd80237fe4f19171a5991f54ccc
   languageName: node
   linkType: hard
 

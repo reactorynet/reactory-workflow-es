@@ -40,3 +40,118 @@ jobs:
 
       - name: Test
         run: yarn test
+
+  # ── Provider build + integration test matrix ─────────────────────────────────
+  #
+  # Builds every non-deprecated provider and runs the shared IPersistenceProvider
+  # conformance suite (M8) against ephemeral service containers.
+  #
+  # Included providers:
+  #   workflow-es-sqlite   — build + full conformance (no service needed)
+  #   workflow-es-postgres — build + full conformance (postgres:16 service)
+  #   workflow-es-mongodb  — build + PENDING conformance (TODO(C3): driver v6 rewrite)
+  #   workflow-es-redis    — build + smoke tests (lock/queue provider, not IPersistenceProvider)
+  #
+  # Excluded providers (with justification):
+  #   workflow-es-mysql  — EXCLUDED: deprecated under C3 (EOL Sequelize 4 / sequelize-typescript 0.6).
+  #                        TODO(C3): re-evaluate after C3's decision (upgrade or remove).
+  #                        Not in matrix; not built here.
+  #   workflow-es-azure  — EXCLUDED: queue/lock stub, out of M8 scope.
+  #                        Build-check only if it becomes relevant; not added to this matrix.
+  #
+  # Gate proof (§8 meta): rename IPersistenceProvider.getWorkflowInstance → getInstance in
+  # core/src/abstractions/persistence-provider.ts (and only there). The `providers` job will
+  # go RED on `npx tsc --noEmit` for postgres, sqlite, and the conformance module; core's own
+  # job may stay green if it compiles the rename. Revert → providers go green again.
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  providers:
+    name: Providers (${{ matrix.provider }}, Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    strategy:
+      fail-fast: false
+      matrix:
+        provider:
+          - workflow-es-sqlite
+          - workflow-es-postgres
+          - workflow-es-mongodb
+          - workflow-es-redis
+        node-version: [20.x, 22.x]
+
+    # All three backing services are declared on every matrix leg for simplicity.
+    # An unused service (e.g. Mongo on the SQLite leg) is harmless and idle.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: reactory
+          POSTGRES_PASSWORD: reactory
+          POSTGRES_DB: reactory
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reactory"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "echo 'db.runCommand({ping:1}).ok' | mongosh --quiet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: providers/${{ matrix.provider }}
+
+    env:
+      WORKFLOW_ES_PG_TEST_URL: postgres://reactory:reactory@127.0.0.1:5432/reactory
+      WORKFLOW_ES_MONGO_TEST_URL: mongodb://127.0.0.1:27017/workflow-es-test
+      WORKFLOW_ES_REDIS_TEST_URL: redis://127.0.0.1:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "yarn"
+          cache-dependency-path: providers/${{ matrix.provider }}/yarn.lock
+
+      # core is installed as file:../../core in each provider's package.json;
+      # build it first so providers compile against emitted .d.ts/.js, not raw TS.
+      - name: Build core
+        working-directory: core
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
+
+      - name: Install provider dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: yarn build
+
+      - name: Test (conformance + provider specs)
+        run: yarn test

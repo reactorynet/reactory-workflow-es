@@ -3,10 +3,11 @@ import { Redis } from "ioredis";
 import { RedisLockManager } from "../src/redis-lock-manager";
 import { RedisQueueProvider } from "../src/redis-queue-provider";
 
-// These tests require a real Redis. Point REDIS_URL at it (e.g.
-// redis://127.0.0.1:6379). When no Redis is reachable the suite is marked
-// pending with a clear message — it is never silently green.
-const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+// These tests require a real Redis.
+// In CI: WORKFLOW_ES_REDIS_TEST_URL is set from the GitHub Actions redis service.
+// Locally: set REDIS_URL or WORKFLOW_ES_REDIS_TEST_URL to point at a redis:7 instance.
+// When no Redis is reachable the suite is marked pending — never silently green.
+const REDIS_URL = process.env.WORKFLOW_ES_REDIS_TEST_URL || process.env.REDIS_URL || "redis://127.0.0.1:6379";
 
 async function probe(): Promise<boolean> {
     const client = new Redis(REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1, retryStrategy: () => null });
@@ -55,7 +56,7 @@ describe("redis providers", () => {
 
     it("lock is mutually exclusive", async () => {
         if (!redisAvailable) {
-            pending(`No Redis reachable at ${REDIS_URL}; skipping live lock test. Set REDIS_URL to run it.`);
+            pending(`No Redis reachable at ${REDIS_URL}; skipping live lock test. Set WORKFLOW_ES_REDIS_TEST_URL or REDIS_URL to run it.`);
             return;
         }
 
@@ -75,7 +76,7 @@ describe("redis providers", () => {
 
     it("queue is FIFO and reliable", async () => {
         if (!redisAvailable) {
-            pending(`No Redis reachable at ${REDIS_URL}; skipping live queue test. Set REDIS_URL to run it.`);
+            pending(`No Redis reachable at ${REDIS_URL}; skipping live queue test. Set WORKFLOW_ES_REDIS_TEST_URL or REDIS_URL to run it.`);
             return;
         }
 

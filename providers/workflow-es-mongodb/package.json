@@ -1,14 +1,13 @@
 {
   "name": "workflow-es-mongodb",
-  "version": "2.1.1",
-  "description": "MongoDB provider for Workflow ES",
+  "version": "2.1.1-reactory.0",
+  "description": "MongoDB provider for Workflow ES (Reactory fork — driver v3; C3 will rewrite to v6)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "pretest": "docker pull mongo && docker run -p 27019:27017 --name workflow-es-tests -d mongo && npm run build",
-    "test": "jasmine",
-    "posttest": "docker kill workflow-es-tests && docker rm workflow-es-tests"
+    "pretest": "npm run build",
+    "test": "jasmine"
   },
   "keywords": [
     "workflow",
@@ -26,6 +25,7 @@
     "@types/node": "^20.0.0",
     "jasmine": "^5.0.0",
     "jasmine-core": "^5.0.0",
+    "reflect-metadata": "^0.2.0",
     "typescript": "^5.0.0"
   },
   "peerDependencies": {
