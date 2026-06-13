@@ -15,3 +15,6 @@ export * from "./abstractions/execution-pointer-factory";
 export * from "./abstractions/errors";
 export * from "./abstractions/workflow-options";
 export * from "./abstractions/lifecycle-events";
+export * from "./abstractions/metrics";
+export * from "./abstractions/tracer";
+export * from "./abstractions/health";

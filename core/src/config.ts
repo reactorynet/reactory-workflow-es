@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { Container, ContainerModule, interfaces, injectable, inject } from "inversify";
-import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent } from "./abstractions";
-import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger, LifecycleEventHub } from "./services";
+import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, ITracer } from "./abstractions";
+import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger, LifecycleEventHub, NoOpMetrics, NoOpTracer } from "./services";
 
 /**
  * Resolve caller-supplied partial options against defaults, validating each field that
@@ -83,6 +83,23 @@ export class WorkflowConfig {
         this.container.rebind<ILogger>(TYPES.ILogger).toConstantValue(service);
     }
 
+    /**
+     * M5 — swap the metrics facade (plan §8.1: a swappable service gets a useX() setter).
+     * The default NoOpMetrics discards everything, so core stays zero-dependency and emits
+     * nothing until an adapter (e.g. @reactorynet/workflow-es-opentelemetry) is injected.
+     */
+    public useMetrics(service: IMetrics) {
+        this.container.rebind<IMetrics>(TYPES.IMetrics).toConstantValue(service);
+    }
+
+    /**
+     * M5 — swap the tracer facade. The default NoOpTracer returns a no-op span, so core
+     * has zero tracing dependency until an adapter is injected.
+     */
+    public useTracer(service: ITracer) {
+        this.container.rebind<ITracer>(TYPES.ITracer).toConstantValue(service);
+    }
+
     public usePersistence(service: IPersistenceProvider) {
         this.container.rebind<IPersistenceProvider>(TYPES.IPersistenceProvider).toConstantValue(service);
     }
@@ -136,6 +153,8 @@ export function configureWorkflow(options?: Partial<WorkflowOptions>): WorkflowC
         bind<IExecutionResultProcessor>(TYPES.IExecutionResultProcessor).to(ExecutionResultProcessor);
         bind<IExecutionPointerFactory>(TYPES.IExecutionPointerFactory).to(ExecutionPointerFactory);
         bind<ILifecycleEventHub>(TYPES.ILifecycleEventHub).to(LifecycleEventHub).inSingletonScope();
+        bind<IMetrics>(TYPES.IMetrics).to(NoOpMetrics).inSingletonScope();
+        bind<ITracer>(TYPES.ITracer).to(NoOpTracer).inSingletonScope();
 
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(WorkflowQueueWorker);
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(EventQueueWorker);

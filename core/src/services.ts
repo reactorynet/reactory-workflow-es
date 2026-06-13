@@ -13,3 +13,5 @@ export * from "./services/workflow-registry";
 export * from "./services/execution-result-processor";
 export * from "./services/execution-pointer-factory";
 export * from "./services/lifecycle-events";
+export * from "./services/no-op-metrics";
+export * from "./services/no-op-tracer";

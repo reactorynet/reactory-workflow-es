@@ -1,5 +1,5 @@
 import { injectable, inject, Container } from "inversify";
-import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, toError, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED } from "../abstractions";
+import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, toError, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED, IMetrics, ITracer, ISpan, METRIC_NAMES, SPAN_NAMES, ATTR, MetricAttributes } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, WorkflowDefinition, ExecutionPointer, PointerStatus, ExecutionResult, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult } from "../models";
 
@@ -21,6 +21,12 @@ export class WorkflowExecutor implements IWorkflowExecutor {
     @inject(TYPES.ILifecycleEventHub)
     private lifecycle : ILifecycleEventHub;
 
+    @inject(TYPES.IMetrics)
+    private metrics : IMetrics;
+
+    @inject(TYPES.ITracer)
+    private tracer : ITracer;
+
     @inject(Container)
     private container : Container;
     
@@ -40,6 +46,13 @@ export class WorkflowExecutor implements IWorkflowExecutor {
         for (let pointer of exePointers) {
             let step: WorkflowStepBase = def.steps.find(x => x.id == pointer.stepId);
             if (step) {
+                // M5 §6.4: count an existing retry attempt (does not change retry behaviour, that is H5).
+                if (pointer.retryCount && pointer.retryCount > 0) {
+                    this.safeMetric(() => this.metrics.incrementCounter(METRIC_NAMES.STEP_RETRIES, 1, {
+                        [ATTR.WORKFLOW_DEFINITION_ID]: instance.workflowDefinitionId,
+                        [ATTR.STEP_ID]: String(pointer.stepId),
+                    }));
+                }
                 try {
                     pointer.status = PointerStatus.Running;
                     switch (step.initForExecution(result, def, instance, pointer)) {
@@ -78,8 +91,33 @@ export class WorkflowExecutor implements IWorkflowExecutor {
                             continue;
                     }
 
-                    //execute
-                    let stepResult = await body.run(stepContext);
+                    //execute — M5 §6.1/§6.2: wrap body.run in a span and time it; the
+                    // span ends and the duration histogram records on both success and failure.
+                    const spanAttrs: MetricAttributes = {
+                        [ATTR.WORKFLOW_ID]: instance.id,
+                        [ATTR.STEP_ID]: String(step.id),
+                        [ATTR.WORKFLOW_DEFINITION_ID]: instance.workflowDefinitionId,
+                        [ATTR.WORKFLOW_VERSION]: instance.version,
+                    };
+                    if (step.name)
+                        spanAttrs[ATTR.STEP_NAME] = step.name;
+                    let span: ISpan = this.startSpanSafe(SPAN_NAMES.STEP_EXECUTE, spanAttrs);
+                    const t0 = Date.now();
+                    let stepResult;
+                    try {
+                        stepResult = await body.run(stepContext);
+                    }
+                    catch (runErr) {
+                        this.safeSpan(() => span.recordError(toError(runErr)));
+                        throw runErr;
+                    }
+                    finally {
+                        this.safeMetric(() => this.metrics.recordHistogram(METRIC_NAMES.STEP_DURATION, Date.now() - t0, {
+                            [ATTR.WORKFLOW_DEFINITION_ID]: instance.workflowDefinitionId,
+                            [ATTR.STEP_ID]: String(step.id),
+                        }));
+                        this.safeSpan(() => span.end());
+                    }
 
                     //outputs
                     for (let output of step.outputs) {
@@ -91,6 +129,11 @@ export class WorkflowExecutor implements IWorkflowExecutor {
                 catch (err) {
                     const error = toError(err);
                     this.logger.error("Error executing workflow %s on step %s - %o", instance.id, pointer.stepId, error);
+                    // M5 §6.3: one error counter increment per caught step error.
+                    this.safeMetric(() => this.metrics.incrementCounter(METRIC_NAMES.STEP_ERRORS, 1, {
+                        [ATTR.WORKFLOW_DEFINITION_ID]: instance.workflowDefinitionId,
+                        [ATTR.STEP_ID]: String(pointer.stepId),
+                    }));
                     let perr = new ExecutionError();
                     perr.message = error.message;
                     perr.errorTime = new Date();
@@ -213,5 +256,29 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             instance.completeTime = new Date();
             instance.status = WorkflowStatus.Complete;
         }
-    }    
+    }
+
+    /**
+     * M5 §6.13: telemetry MUST NOT break execution. A throwing metrics/tracer
+     * call is caught and logged; it never escapes the step.
+     */
+    private safeMetric(fn: () => void): void {
+        try { fn(); }
+        catch (err) { this.logger.error("Metrics call failed (ignored): " + toError(err).message); }
+    }
+
+    private safeSpan(fn: () => void): void {
+        try { fn(); }
+        catch (err) { this.logger.error("Tracer call failed (ignored): " + toError(err).message); }
+    }
+
+    private startSpanSafe(name: string, attributes: MetricAttributes): ISpan {
+        try {
+            return this.tracer.startSpan(name, attributes);
+        }
+        catch (err) {
+            this.logger.error("Tracer.startSpan failed (ignored): " + toError(err).message);
+            return { setAttribute() {}, recordError() {}, end() {} };
+        }
+    }
 }

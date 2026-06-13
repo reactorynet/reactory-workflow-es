@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event, WorkflowExecutorResult } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowConcurrencyError, WorkflowOptions } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowConcurrencyError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
@@ -25,6 +25,9 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
 
     @inject(TYPES.WorkflowOptions)
     private options: WorkflowOptions;
+
+    @inject(TYPES.IMetrics)
+    private metrics: IMetrics;
 
     private processTimer: any;
 
@@ -86,6 +89,10 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
     }
 
     private async processQueue(self: WorkflowQueueWorker): Promise<void> {
+        // M5 §6.7/§6.8: record the active-workflows gauge (from H1's getActiveCount —
+        // no new counter) and the workflow queue-depth gauge (if the provider implements
+        // the optional getQueueLength probe) once per cycle. Telemetry never breaks the loop.
+        await self.recordGauges(self);
         try {
             // H1 backpressure (rules §6.1/§6.2): dequeue-and-start only while a
             // slot is free; at capacity, leave pending items on the queue for the
@@ -115,6 +122,21 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
             // H1 (rules §6.3/§6.8): re-arm after the dequeue-and-dispatch phase
             // (not after in-flight work settles); the worker self-heals after errors.
             self.scheduleNext();
+        }
+    }
+
+    private async recordGauges(self: WorkflowQueueWorker): Promise<void> {
+        try {
+            self.metrics.recordGauge(METRIC_NAMES.WORKFLOW_ACTIVE, self.getActiveCount());
+            const qp: any = self.queueProvider;
+            if (typeof qp.getQueueLength === "function") {
+                const depth = await qp.getQueueLength(QueueType.Workflow);
+                self.metrics.recordGauge(METRIC_NAMES.QUEUE_DEPTH, depth, { [ATTR.QUEUE]: "workflow" });
+            }
+        }
+        catch (err) {
+            const error = toError(err);
+            self.logger.error("Error recording workflow queue gauges (ignored): " + error.message);
         }
     }
 

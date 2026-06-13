@@ -42,4 +42,16 @@ export class SingleNodeQueueProvider implements IQueueProvider {
                 return this.eventQueue.shift();
         }
     }
+
+    /** M5 §5.4/§7: optional queue-depth probe backed by the in-memory arrays. */
+    public async getQueueLength(queue: QueueType): Promise<number> {
+        switch (queue) {
+            case QueueType.Workflow:
+                return this.workflowQueue.length;
+            case QueueType.Event:
+                return this.eventQueue.length;
+            default:
+                return 0;
+        }
+    }
 }

@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
@@ -25,6 +25,9 @@ export class EventQueueWorker implements IBackgroundWorker {
 
     @inject(TYPES.WorkflowOptions)
     private options: WorkflowOptions;
+
+    @inject(TYPES.IMetrics)
+    private metrics: IMetrics;
 
     private processTimer: any;
 
@@ -86,6 +89,9 @@ export class EventQueueWorker implements IBackgroundWorker {
     }
 
     private async processQueue(self: EventQueueWorker): Promise<void> {
+        // M5 §6.8: record the event queue-depth gauge once per cycle if the provider
+        // implements the optional getQueueLength probe. Telemetry never breaks the loop.
+        await self.recordQueueDepth(self);
         try {
             // H1 backpressure (rules §6.1/§6.2): dequeue-and-start only while a
             // slot is free; at capacity, leave pending items on the queue for the
@@ -115,6 +121,20 @@ export class EventQueueWorker implements IBackgroundWorker {
             // H1 (rules §6.3/§6.8): re-arm after the dequeue-and-dispatch phase
             // (not after in-flight work settles); the worker self-heals after errors.
             self.scheduleNext();
+        }
+    }
+
+    private async recordQueueDepth(self: EventQueueWorker): Promise<void> {
+        try {
+            const qp: any = self.queueProvider;
+            if (typeof qp.getQueueLength === "function") {
+                const depth = await qp.getQueueLength(QueueType.Event);
+                self.metrics.recordGauge(METRIC_NAMES.QUEUE_DEPTH, depth, { [ATTR.QUEUE]: "event" });
+            }
+        }
+        catch (err) {
+            const error = toError(err);
+            self.logger.error("Error recording event queue depth (ignored): " + error.message);
         }
     }
 

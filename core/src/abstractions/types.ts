@@ -11,6 +11,8 @@ let TYPES = {
     IExecutionPointerFactory: Symbol("IExecutionPointerFactory"),
     WorkflowOptions: Symbol("WorkflowOptions"),
     ILifecycleEventHub: Symbol("ILifecycleEventHub"),
+    IMetrics: Symbol("IMetrics"),
+    ITracer: Symbol("ITracer"),
 };
 
 export { TYPES };

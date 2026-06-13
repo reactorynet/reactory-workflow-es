@@ -1,7 +1,8 @@
 import { injectable, inject, multiInject } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent } from "../abstractions";
+import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, METRIC_NAMES, ATTR, HealthStatus, HealthReport, ComponentHealth, isHealthProbe, IHealthProbe } from "../abstractions";
 import { WorkflowQueueWorker } from "./workflow-queue-worker";
+import { PollWorker } from "./poll-worker";
 
 import { MemoryPersistenceProvider } from "./memory-persistence-provider";
 import { SingleNodeLockProvider } from "./single-node-lock-provider";
@@ -38,7 +39,15 @@ export class WorkflowHost implements IWorkflowHost {
     @inject(TYPES.ILifecycleEventHub)
     private lifecycle: ILifecycleEventHub;
 
+    @inject(TYPES.IMetrics)
+    private metrics: IMetrics;
+
     private allowSingleNodeProviders: boolean = false;
+
+    // M5 §6.11: epoch-ms the host last started, or null if never started. health()
+    // treats a still-null poll heartbeat as Degraded only once the host has been
+    // started longer than the stale threshold (a grace window for the first tick).
+    private startedAt: number | null = null;
 
     // H4: shared stop promise — makes stop() idempotent (concurrent and
     // repeated calls share the same drain). Reset by start() so a restarted
@@ -82,6 +91,7 @@ export class WorkflowHost implements IWorkflowHost {
             worker.start();
         }
         this.registerCleanCallbacks();
+        this.startedAt = Date.now();
     }
 
     private guardSingleNodeProviders(): void {
@@ -150,6 +160,14 @@ export class WorkflowHost implements IWorkflowHost {
         wf.executionPointers.push(ep);
         
         let workflowId = await self.persistence.createNewWorkflow(wf);
+        // M5 §6.5: count one started workflow per successful createNewWorkflow,
+        // after the instance is persisted. Telemetry never breaks execution.
+        try {
+            self.metrics.incrementCounter(METRIC_NAMES.WORKFLOW_STARTED, 1, { [ATTR.WORKFLOW_DEFINITION_ID]: def.id });
+        }
+        catch (err) {
+            self.logger.error("Metrics call failed (ignored): " + toError(err).message);
+        }
         self.queueProvider.queueForProcessing(workflowId, QueueType.Workflow);
 
         return workflowId;
@@ -172,7 +190,14 @@ export class WorkflowHost implements IWorkflowHost {
         evt.eventTime = eventTime;
         evt.isProcessed = false;
         let id = await this.persistence.createEvent(evt);
-        this.queueProvider.queueForProcessing(id, QueueType.Event);        
+        // M5 §6.6: count one published event. Telemetry never breaks execution.
+        try {
+            this.metrics.incrementCounter(METRIC_NAMES.EVENT_PUBLISHED, 1, { "event.name": eventName });
+        }
+        catch (err) {
+            this.logger.error("Metrics call failed (ignored): " + toError(err).message);
+        }
+        this.queueProvider.queueForProcessing(id, QueueType.Event);
     }
 
     
@@ -247,6 +272,116 @@ export class WorkflowHost implements IWorkflowHost {
         }
     }
     
+    /**
+     * M5 §6.10–§6.12: point-in-time health report. Probes persistence, lock, and queue
+     * providers concurrently via the optional IHealthProbe, reports active workflow count
+     * (from H1's getActiveCount) and the poll-worker heartbeat, and computes a worst-of
+     * aggregate. Never throws — a failing probe is captured into its component status.
+     */
+    public async health(): Promise<HealthReport> {
+        const components: ComponentHealth[] = await Promise.all([
+            this.probeComponent("persistence", this.persistence),
+            this.probeComponent("lock", this.lockProvider),
+            this.probeComponent("queue", this.queueProvider),
+        ]);
+
+        components.push(this.pollComponent());
+
+        const activeWorkflows = this.computeActiveWorkflows();
+
+        const status = components.reduce<HealthStatus>(
+            (worst, c) => this.worseOf(worst, c.status),
+            HealthStatus.Healthy
+        );
+
+        return {
+            status,
+            timestamp: new Date().toISOString(),
+            activeWorkflows,
+            lastPollAt: this.getLastPollAt(),
+            components,
+        };
+    }
+
+    /** Sum the H1 in-flight counts across all background workers. */
+    private computeActiveWorkflows(): number {
+        let total = 0;
+        for (let worker of this.workers) {
+            if (typeof (worker as any).getActiveCount === "function") {
+                total += (worker as any).getActiveCount();
+            }
+        }
+        return total;
+    }
+
+    private getLastPollAt(): number | null {
+        for (let worker of this.workers) {
+            if (worker instanceof PollWorker) {
+                return worker.getLastPollAt();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * M5 §6.10: probe a single provider. If it implements IHealthProbe, await ping()
+     * (true → Healthy, false → Unhealthy, throw/reject → Unhealthy with the message).
+     * If it does not, report Healthy / "probe not implemented" (health is inferred,
+     * never assumed broken). Never throws.
+     */
+    private async probeComponent(name: string, provider: unknown): Promise<ComponentHealth> {
+        if (!isHealthProbe(provider)) {
+            return { name, status: HealthStatus.Healthy, detail: "probe not implemented" };
+        }
+        const t0 = Date.now();
+        try {
+            const ok = await (provider as IHealthProbe).ping();
+            const latencyMs = Date.now() - t0;
+            return ok
+                ? { name, status: HealthStatus.Healthy, latencyMs }
+                : { name, status: HealthStatus.Unhealthy, detail: "ping returned false", latencyMs };
+        }
+        catch (err) {
+            return { name, status: HealthStatus.Unhealthy, detail: toError(err).message, latencyMs: Date.now() - t0 };
+        }
+    }
+
+    /**
+     * M5 §6.11: the poll component is Degraded (never Unhealthy) if the host has started
+     * but the poll worker has not yet ticked, or its last tick is older than 3× the poll
+     * interval. Otherwise Healthy.
+     */
+    private pollComponent(): ComponentHealth {
+        const lastPollAt = this.getLastPollAt();
+        const pollIntervalMs = this.options ? this.options.pollIntervalMs : 10000;
+        const staleThresholdMs = pollIntervalMs * 3;
+
+        if (lastPollAt === null) {
+            if (this.startedAt === null) {
+                return { name: "poll", status: HealthStatus.Healthy, detail: "host not started" };
+            }
+            // Grace window: a just-started host has not had a chance to tick yet.
+            // Only flag Degraded once the first tick is overdue (started > 3× poll ago).
+            const sinceStart = Date.now() - this.startedAt;
+            if (sinceStart > staleThresholdMs) {
+                return { name: "poll", status: HealthStatus.Degraded, detail: "no poll tick recorded after " + sinceStart + "ms" };
+            }
+            return { name: "poll", status: HealthStatus.Healthy, detail: "awaiting first poll tick" };
+        }
+        const age = Date.now() - lastPollAt;
+        if (age > staleThresholdMs) {
+            return { name: "poll", status: HealthStatus.Degraded, detail: "last poll " + age + "ms ago (stale)" };
+        }
+        return { name: "poll", status: HealthStatus.Healthy };
+    }
+
+    /** Worst-of ordering: Healthy < Degraded < Unhealthy. */
+    private worseOf(a: HealthStatus, b: HealthStatus): HealthStatus {
+        const rank = (s: HealthStatus): number =>
+            s === HealthStatus.Unhealthy ? 2 : s === HealthStatus.Degraded ? 1 : 0;
+        return rank(b) > rank(a) ? b : a;
+    }
+
     /**
      * Spec H4 §6.6/§6.9: register SIGTERM and SIGINT handlers exactly once per
      * host start (guarded by the stored handler references); both fire the

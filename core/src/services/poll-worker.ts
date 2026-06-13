@@ -23,6 +23,9 @@ export class PollWorker implements IBackgroundWorker {
     @inject(TYPES.WorkflowOptions)
     private options: WorkflowOptions;
 
+    // M5 §6.9: epoch-ms of the last completed poll tick, exposed for health().
+    private lastPollAt: number | null = null;
+
     private processTimer: any;
 
     // H4: in-flight poll ticks (at most one at a time today). Kept as a Set so
@@ -70,6 +73,11 @@ export class PollWorker implements IBackgroundWorker {
         return [];
     }
 
+    /** M5 §6.9: epoch-ms of the last completed poll tick, or null before the first tick. */
+    public getLastPollAt(): number | null {
+        return this.lastPollAt;
+    }
+
     private tick(self: PollWorker): void {
         if (self.shuttingDown)
             return;
@@ -85,6 +93,17 @@ export class PollWorker implements IBackgroundWorker {
     }
 
     private async process(self: PollWorker): Promise<void> {
+        try {
+            await self.processInner(self);
+        }
+        finally {
+            // M5 §6.9: record the heartbeat at the end of every completed tick,
+            // regardless of lease ownership or scan errors.
+            self.lastPollAt = Date.now();
+        }
+    }
+
+    private async processInner(self: PollWorker): Promise<void> {
         self.logger.info("pollRunnables " + " - now = " + Date.now());
 
         // Elect a single active poller for this cycle via the distributed lease.

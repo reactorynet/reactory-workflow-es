@@ -1,6 +1,7 @@
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription } from "../models";
 import { WorkflowBase, IPersistenceProvider, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger } from "../abstractions";
 import { LifecycleEvent } from "./lifecycle-events";
+import { HealthReport } from "./health";
 
 export interface IWorkflowHost {
     start(): Promise<void>;
@@ -26,4 +27,10 @@ export interface IWorkflowHost {
      * state. Delegates to the injected ILifecycleEventHub.
      */
     onLifecycleEvent(handler: (evt: LifecycleEvent) => void): void;
+    /**
+     * Produce a point-in-time health report: probes the persistence, lock, and queue
+     * providers (via the optional IHealthProbe), reports active workflow count and the
+     * poll-worker heartbeat, and computes the worst-of aggregate status. Never throws.
+     */
+    health(): Promise<HealthReport>;
 }
