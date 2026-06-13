@@ -26,6 +26,11 @@ Rules (from the request):
   re-delegate one tier up and note why in the PR. Never silently retry at the same tier.
 - **De-escalation:** if a `fable` item turns out to be mostly mechanical once its dependency landed,
   drop it to `sonnet`.
+- **`fable` unavailable → `opus` (2026-06-13):** `fable` became inaccessible mid-programme after H2,
+  H4, H1 and H5 had already shipped on it. The remaining `fable`-tier items (M5, H6, M6) were
+  escalated to `opus` rather than downgraded to `sonnet`, to preserve the intent that these sit
+  *above* the `sonnet` bar (concurrency / security / cross-cutting design). If `fable` returns, prefer
+  it again for any not-yet-started item in this set.
 
 ---
 
@@ -45,18 +50,19 @@ Ordered by the roadmap. "Why this tier" is the deciding factor, not a full summa
 | 8 | C3 | Repair Mongo / deprecate MySQL | `[copilot+review]` | **`sonnet`** | Mechanical callback→async translation + deprecation; needs the concurrency token + conformance, so above `haiku`. |
 | 9 | M7 | Provider dependency hygiene | `[copilot+review]` | **`haiku`** | Pure package.json peer-dep moves + import renames; no logic. |
 | 10 | M8 | Providers built + integration-tested in CI | `[copilot+review]` | **`sonnet`** | CI YAML + a shared conformance test module; moderate, pattern-driven. |
-| 11 | M5 | OpenTelemetry tracing + metrics + health | `[claude]` | **`fable`** | New optional abstractions, adapter package, health aggregation; design-heavy. |
+| 11 | M5 | OpenTelemetry tracing + metrics + health | `[claude]` | **`opus`** (was `fable`) | New optional abstractions, adapter package, health aggregation; design-heavy. Escalated from `fable` (unavailable — see §1). |
 | 12 | M4 | Structured logging + correlation IDs | `[copilot+review]` | **`sonnet`** | Interface redesign + mechanical migration of ~27 call sites; public API but low algorithmic risk. |
-| 13 | H6 | At-rest encryption/redaction hook | `[claude]` | **`fable`** | Security-sensitive; must not encode query fields; memory-provider live-reference trap. |
-| 14 | M6 | Multi-tenancy / namespace scoping | `[claude]` | **`fable`** | Interface change across **all** providers + lock-key namespacing + default-tenant back-compat. |
+| 13 | H6 | At-rest encryption/redaction hook | `[claude]` | **`opus`** (was `fable`) | Security-sensitive; must not encode query fields; memory-provider live-reference trap. Escalated from `fable` (unavailable — see §1). |
+| 14 | M6 | Multi-tenancy / namespace scoping | `[claude]` | **`opus`** (was `fable`) | Interface change across **all** providers + lock-key namespacing + default-tenant back-compat. Escalated from `fable` (unavailable — see §1). |
 | 15 | M2 | Mandated provider indexes | `[copilot+review]` | **`sonnet`** | Index definitions per provider + EXPLAIN verification; pattern-driven. |
 | 16 | M1 | Workflow-definition version-safety | `[copilot+review]` | **`sonnet`** | Small; reuses H5's dead-letter machinery; `tryGetDefinition` + load-path guard. |
 | 17 | M3 | Document & guard execution model (Electron) | `[claude]` | **`sonnet`** | Docs + an Electron sample; judgement in prose/sample, low core risk. |
 
-**Tally:** `opus` ×1 · `fable` ×6 · `sonnet` ×9 · `haiku` ×1.
+**Tally (after the 2026-06-13 `fable`→`opus` fallback):** `opus` ×4 (C1, M5, H6, M6) · `fable` ×4
+(H2, H4, H1, H5 — all shipped before `fable` became unavailable) · `sonnet` ×8 · `haiku` ×1.
 
-> The `fable` set is exactly the concurrency / cross-cutting / security-sensitive items
-> (H2, H4, H1, H5, M5, H6, M6). If any proves more mechanical than expected once its dependency lands,
+> The high-complexity set is the concurrency / cross-cutting / security-sensitive items
+> (H2, H4, H1, H5, M5, H6, M6) — run on `fable` where available, else `opus` (§1). If any proves more mechanical than expected once its dependency lands,
 > de-escalate to `sonnet` per §1.
 
 ---
