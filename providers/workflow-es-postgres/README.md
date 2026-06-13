@@ -61,6 +61,34 @@ tables if they do not exist. Await the `connect` promise before use.
   workflow's pointers wholesale inside a transaction, preserving the
   factory-assigned pointer ids.
 
+## Using MySQL (and other Sequelize dialects)
+
+The `PostgresPersistence` class passes its `options` argument directly to Sequelize, which is a
+multi-dialect ORM. You can point it at a MySQL database by setting `dialect: "mysql"` and
+installing the `mysql2` driver:
+
+```bash
+npm install @reactorynet/workflow-es-postgres mysql2
+```
+
+```typescript
+import { PostgresPersistence } from "@reactorynet/workflow-es-postgres";
+
+const persistence = new PostgresPersistence(
+    "mysql://user:password@localhost:3306/workflow",
+    { dialect: "mysql" }
+);
+await persistence.connect;
+```
+
+Under MySQL, Sequelize maps `JSONB` columns to `JSON` and `UUID` columns to `CHAR(36)`
+automatically. No source changes are needed.
+
+> **Note on existing MySQL data:** if you are migrating from the deprecated
+> `workflow-es-mysql` package (which used Sequelize 4), the schema produced by Sequelize 6 may
+> differ. Greenfield installs are unaffected — `sequelize.sync()` creates the correct tables on
+> first connect.
+
 ## Testing
 
 The spec runs against a real Postgres instance. By default it connects to the

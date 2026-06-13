@@ -1,7 +1,7 @@
 {
-  "name": "workflow-es-mongodb",
-  "version": "2.1.1-reactory.0",
-  "description": "MongoDB provider for Workflow ES (Reactory fork — driver v3; C3 will rewrite to v6)",
+  "name": "@reactorynet/workflow-es-mongodb",
+  "version": "1.0.0-reactory.0",
+  "description": "MongoDB persistence provider for Workflow ES (Reactory fork — driver v6)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
   "scripts": {
@@ -21,7 +21,6 @@
   "devDependencies": {
     "@reactorynet/workflow-es": "file:../../core",
     "@types/jasmine": "^4.6.0",
-    "@types/mongodb": "^3.6.20",
     "@types/node": "^20.0.0",
     "jasmine": "^5.0.0",
     "jasmine-core": "^5.0.0",
@@ -30,12 +29,10 @@
   },
   "peerDependencies": {
     "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
-    "inversify": "^6.0.0",
     "reflect-metadata": "^0.2.0"
   },
   "dependencies": {
-    "json-stable-stringify": "^1.0.1",
-    "mongodb": "^3.2.7"
+    "mongodb": "^6.0.0"
   },
   "repository": {
     "type": "git",

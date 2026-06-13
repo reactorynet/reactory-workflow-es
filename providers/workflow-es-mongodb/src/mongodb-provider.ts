@@ -1,231 +1,215 @@
-import { IPersistenceProvider, WorkflowInstance, EventSubscription, Event, WorkflowStatus, WorkflowConcurrencyError } from "@reactorynet/workflow-es";
-import { MongoClient, ObjectID as BsonObjectID } from "mongodb";
-
-// The driver-v3 callable form `ObjectID(id)` is no longer in the type surface, but
-// the runtime constructor is. Wrap it so the existing call sites keep working without
-// the broader driver-v6 modernisation that C3 owns.
-const ObjectID = (id: string | number): any => new (BsonObjectID as any)(id);
+import {
+    IPersistenceProvider,
+    WorkflowInstance,
+    EventSubscription,
+    Event,
+    WorkflowStatus,
+    WorkflowConcurrencyError
+} from "@reactorynet/workflow-es";
+import { MongoClient, ObjectId, Collection, Db } from "mongodb";
 
 export class MongoDBPersistence implements IPersistenceProvider {
 
     public connect: Promise<void>;
-    private client: any;
-    private workflowCollection: any;
-    private subscriptionCollection: any;
-    private eventCollection: any;
-    private retryCount: number = 0;
+    private client: MongoClient;
+    private db: Db;
+    private workflowCollection: Collection;
+    private subscriptionCollection: Collection;
+    private eventCollection: Collection;
 
-    
-    constructor(connectionString: string) {
-        var self = this;
-        this.connect = new Promise<void>((resolve, reject) => {  
-            const options =  { useNewUrlParser: true,  useUnifiedTopology: true };
-            MongoClient.connect(connectionString, options, (err, client) => {
-                if (err)
-                    reject(err);
-                self.client = client;
-                const db = self.client.db();
-                self.workflowCollection = db.collection("workflows");
-                self.subscriptionCollection = db.collection("subscriptions");
-                self.eventCollection = db.collection("events");
-                resolve();
-            });
-        });        
+    /**
+     * @param connectionString  MongoDB connection URI, e.g.
+     *   `mongodb://127.0.0.1:27017/workflow-es`
+     * @param options  Optional MongoClientOptions forwarded to MongoClient.
+     *   Driver v4+ removed `useNewUrlParser` / `useUnifiedTopology` (both are
+     *   now the default and are ignored if supplied). Do not pass them.
+     */
+    constructor(connectionString: string, options: any = {}) {
+        this.connect = (async () => {
+            this.client = await MongoClient.connect(connectionString, options);
+            this.db = this.client.db();
+            this.workflowCollection  = this.db.collection("workflows");
+            this.subscriptionCollection = this.db.collection("subscriptions");
+            this.eventCollection = this.db.collection("events");
+        })();
     }
 
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /** Parse `id` into an ObjectId, returning null for invalid/non-hex ids. */
+    private toObjectId(id: string): ObjectId | null {
+        try {
+            return new ObjectId(id);
+        } catch {
+            return null;
+        }
+    }
+
+    // ── Workflows ─────────────────────────────────────────────────────────────
+
+    /**
+     * Insert a new workflow instance.
+     * C1: stamps concurrencyToken = 0 before the first write.
+     * Resolves with the generated id string. Rejects on any insert error.
+     */
     public async createNewWorkflow(instance: WorkflowInstance): Promise<string> {
-        var self = this;
         instance.concurrencyToken = 0;
-        let deferred = new Promise<string>((resolve, reject) => {
-            self.workflowCollection.insertOne(instance)
-                .then((err, result) => {
-                    instance.id = instance["_id"].toString();
-                    resolve(instance.id);
-                })
-                .catch(err => reject(err));        
-        });
-        return deferred;        
+        const result = await this.workflowCollection.insertOne(instance as any);
+        instance.id = result.insertedId.toString();
+        return instance.id;
     }
 
-    public persistWorkflow(instance: WorkflowInstance): Promise<void> {
-        var self = this;
+    /**
+     * Compare-and-set persist.
+     * Filters on { _id, concurrencyToken: expected }, increments the token.
+     * If no document matched (concurrent writer advanced the token), throws
+     * WorkflowConcurrencyError (C1 contract).
+     * On success, advances the in-memory token so the same instance can be
+     * persisted again without a re-read.
+     */
+    public async persistWorkflow(instance: WorkflowInstance): Promise<void> {
+        const id = new ObjectId(instance.id);
         const expected = instance.concurrencyToken ?? 0;
-        let deferred = new Promise<void>((resolve, reject) => {
-            var id = ObjectID(instance.id);
-            delete instance['_id'];
-            // Compare-and-set: only update the doc whose stored token matches `expected`,
-            // and atomically increment it. A null result means another node wrote first.
-            const update = { ...instance } as any;
-            delete update.concurrencyToken;
-            self.workflowCollection.findOneAndUpdate(
-                { _id: id, concurrencyToken: expected },
-                { $set: update, $inc: { concurrencyToken: 1 } },
-                { returnDocument: "after" },
-                (err: any, r: any) => {
-                    if (err)
-                        return reject(err);
-                    const matched = r && (r.value !== undefined ? r.value : r);
-                    if (!matched)
-                        return reject(new WorkflowConcurrencyError(instance.id, expected));
-                    instance.concurrencyToken = expected + 1;
-                    resolve();
-                });
-        });
-        return deferred;
+        const next = expected + 1;
+
+        const update = { ...instance } as any;
+        delete update._id;   // never $set _id
+        delete update.id;    // domain id is the stringified _id
+        update.concurrencyToken = next;
+
+        const result = await this.workflowCollection.findOneAndUpdate(
+            { _id: id, concurrencyToken: expected },   // compare-and-set
+            { $set: update },
+            { returnDocument: "after" }
+        );
+
+        if (!result) {
+            // No document matched the (id, expectedToken) filter — a concurrent
+            // writer advanced the token first, or the row is gone.
+            throw new WorkflowConcurrencyError(instance.id, expected);
+        }
+
+        // Reflect the new token in memory so the caller can persist again.
+        instance.concurrencyToken = next;
     }
 
-    public getWorkflowInstance(workflowId: string): Promise<WorkflowInstance> {
-        var self = this;
-        let deferred = new Promise<WorkflowInstance>((resolve, reject) => {            
-            self.workflowCollection.findOne({ _id: ObjectID(workflowId) }, ((err, doc) => {
-                if (err)
-                    reject(err);
-                doc.id = doc._id.toString();
-                resolve(doc);
-            }));
-        });
-        return deferred;
+    /**
+     * Load a workflow instance by id.
+     * Returns undefined (not throws) for an unknown id, including invalid
+     * ObjectId strings (conformance §6.12).
+     */
+    public async getWorkflowInstance(workflowId: string): Promise<WorkflowInstance> {
+        const oid = this.toObjectId(workflowId);
+        if (!oid) return undefined;
+
+        const doc = await this.workflowCollection.findOne({ _id: oid });
+        if (!doc) return undefined;
+
+        (doc as any).id = doc._id.toString();
+        return doc as any;
     }
 
-    public getRunnableInstances(): Promise<Array<string>> {
-        var self = this;
-        var deferred = new Promise<Array<string>>((resolve, reject) => {            
-            self.workflowCollection.find({ status: WorkflowStatus.Runnable, nextExecution : { $lt: Date.now() } }, { _id: 1 })
-                .toArray((err, data) => {
-                    if (err) {
-                        console.error("workflow-es-mongodb: getRunnableInstances query failed", err);
-                        return reject(err);
-                    }
-                    var result = [];
-                    for (let item of data)
-                        result.push(item["_id"].toString());
-                    resolve(result);
-                });            
-        });
-        return deferred;
+    /** Return ids of Runnable workflows whose nextExecution is in the past. */
+    public async getRunnableInstances(): Promise<Array<string>> {
+        const data = await this.workflowCollection
+            .find({ status: WorkflowStatus.Runnable, nextExecution: { $lt: Date.now() } })
+            .project({ _id: 1 })
+            .toArray();
+        return data.map((item) => item._id.toString());
     }
 
-    public createEventSubscription(subscription: EventSubscription): Promise<void> {
-        var self = this;
-        var deferred = new Promise<void>((resolve, reject) => {            
-            self.subscriptionCollection.insertOne(subscription)
-                .then((err, result) => {
-                    subscription.id = subscription["_id"].toString();
-                    resolve();
-                })
-                .catch(err => reject(err));   
-        });
-        return deferred;
+    // ── Event subscriptions ───────────────────────────────────────────────────
+
+    public async createEventSubscription(subscription: EventSubscription): Promise<void> {
+        const result = await this.subscriptionCollection.insertOne(subscription as any);
+        subscription.id = result.insertedId.toString();
     }
 
-    public async getSubscriptions(eventName: string, eventKey: string, asOf: Date): Promise<Array<EventSubscription>> {        
-        var self = this;
-        var deferred = new Promise<Array<EventSubscription>>((resolve, reject) => {
-            self.subscriptionCollection.find({ eventName: eventName, eventKey: eventKey, subscribeAsOf: { $lt: asOf } })
-                .toArray((err, data) => {
-                    if (err)
-                        reject(err);
-                    for (let item of data)
-                        item.id = item["_id"].toString();
-                    resolve(data);
-                });
+    public async getSubscriptions(
+        eventName: string,
+        eventKey: string,
+        asOf: Date
+    ): Promise<Array<EventSubscription>> {
+        const data = await this.subscriptionCollection
+            .find({ eventName, eventKey, subscribeAsOf: { $lt: asOf } })
+            .toArray();
+        return data.map((item) => {
+            (item as any).id = item._id.toString();
+            return item as any;
         });
-        return deferred;
     }
 
+    /** Delete one subscription by id. Idempotent — no error on missing id. */
     public async terminateSubscription(id: string): Promise<void> {
-        var self = this;
-        var deferred = new Promise<void>((resolve, reject) => {
-            self.subscriptionCollection.remove( { _id: ObjectID(id) }, { single: true }, function(err, numberOfRemovedDocs) {
-                if (err)
-                    reject(err);
-                resolve();
-            });
-        });
-        return deferred;
+        const oid = this.toObjectId(id);
+        if (!oid) return;
+        await this.subscriptionCollection.deleteOne({ _id: oid });
     }
+
+    // ── Events ────────────────────────────────────────────────────────────────
 
     public async createEvent(event: Event): Promise<string> {
-        var self = this;
-        var deferred = new Promise<string>((resolve, reject) => {            
-            self.eventCollection.insertOne(event)
-                .then((err, result) => {
-                    event.id = event["_id"].toString();
-                    resolve(event.id);
-                })
-                .catch(err => reject(err));   
-        });
-        return deferred;
+        const result = await this.eventCollection.insertOne(event as any);
+        event.id = result.insertedId.toString();
+        return event.id;
     }
 
+    /**
+     * Load an event by id.
+     * Returns undefined (not throws) for an unknown or invalid id.
+     */
     public async getEvent(id: string): Promise<Event> {
-        var self = this;
-        var deferred = new Promise<Event>((resolve, reject) => {            
-            self.eventCollection.findOne({ _id: ObjectID(id) }, ((err, doc) => {
-                if (err)
-                    reject(err);
-                doc.id = doc._id.toString();
-                resolve(doc);
-            }));
-        });
-        return deferred;
+        const oid = this.toObjectId(id);
+        if (!oid) return undefined;
+
+        const doc = await this.eventCollection.findOne({ _id: oid });
+        if (!doc) return undefined;
+
+        (doc as any).id = doc._id.toString();
+        return doc as any;
     }
 
+    /** Return ids of unprocessed events whose eventTime is in the past. */
     public async getRunnableEvents(): Promise<Array<string>> {
-        var self = this;
-        var deferred = new Promise<Array<string>>((resolve, reject) => {
-            self.eventCollection.find({ isProcessed: false, eventTime : { $lt: new Date() } }, { _id: 1 })
-                .toArray((err, data) => {
-                    if (err)
-                        reject(err);
-                    var result = [];
-                    for (let item of data)
-                        result.push(item["_id"].toString());
-                    resolve(result);
-                });            
-        });
-        return deferred;
+        const data = await this.eventCollection
+            .find({ isProcessed: false, eventTime: { $lt: new Date() } })
+            .project({ _id: 1 })
+            .toArray();
+        return data.map((item) => item._id.toString());
     }
-    
+
     public async markEventProcessed(id: string): Promise<void> {
-        var self = this;
-        let deferred = new Promise<void>((resolve, reject) => {
-            self.eventCollection.findOneAndUpdate({ _id: ObjectID(id) },{ $set: { isProcessed: true } }, { returnOriginal:true }, 
-            (err, r) => {
-                if (err)
-                    reject(err);
-                resolve();
-            });
-        });        
-        return deferred;
+        const oid = this.toObjectId(id);
+        if (!oid) return;
+        await this.eventCollection.findOneAndUpdate(
+            { _id: oid },
+            { $set: { isProcessed: true } },
+            { returnDocument: "after" }
+        );
     }
 
     public async markEventUnprocessed(id: string): Promise<void> {
-        var self = this;
-        let deferred = new Promise<void>((resolve, reject) => {            
-            self.eventCollection.findOneAndUpdate({ _id: ObjectID(id) }, { $set: { isProcessed: false } }, { returnOriginal:true }, 
-            (err, r) => {
-                if (err)
-                    reject(err);
-                resolve();
-            });
-        });        
-        return deferred;
+        const oid = this.toObjectId(id);
+        if (!oid) return;
+        await this.eventCollection.findOneAndUpdate(
+            { _id: oid },
+            { $set: { isProcessed: false } },
+            { returnDocument: "after" }
+        );
     }
 
     public async getEvents(eventName: string, eventKey: any, asOf: Date): Promise<Array<string>> {
-        var self = this;
-        var deferred = new Promise<Array<string>>((resolve, reject) => {            
-            self.eventCollection.find({ eventName: eventName, eventKey: eventKey, eventTime : { $gt: asOf } }, { _id: 1 })
-                .toArray((err, data) => {
-                    if (err)
-                        reject(err);
-                    var result = [];
-                    for (let item of data)
-                        result.push(item["_id"].toString());
-                    resolve(result);
-                });            
-        });
-        return deferred;
+        const data = await this.eventCollection
+            .find({ eventName, eventKey, eventTime: { $gt: asOf } })
+            .project({ _id: 1 })
+            .toArray();
+        return data.map((item) => item._id.toString());
+    }
+
+    /** Close the underlying MongoClient. */
+    public async close(): Promise<void> {
+        if (this.client) {
+            await this.client.close();
+        }
     }
 }

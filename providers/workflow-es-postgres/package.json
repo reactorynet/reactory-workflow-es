@@ -43,6 +43,9 @@
     "sequelize": "^6.37.0",
     "sequelize-typescript": "^2.1.6"
   },
+  "optionalDependencies": {
+    "mysql2": "^3.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/reactorynet/reactory-workflow-es.git",

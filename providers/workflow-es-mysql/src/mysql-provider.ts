@@ -1,3 +1,17 @@
+/**
+ * @deprecated This package (`workflow-es-mysql`) is deprecated.
+ *
+ * MySQL support is available through `@reactorynet/workflow-es-postgres` using
+ * Sequelize's built-in multi-dialect support:
+ *
+ *   import { PostgresPersistence } from "@reactorynet/workflow-es-postgres";
+ *   const p = new PostgresPersistence(connectionString, { dialect: "mysql" });
+ *
+ * You will also need to install the `mysql2` driver:
+ *   npm install @reactorynet/workflow-es-postgres mysql2
+ *
+ * See: providers/workflow-es-postgres/README.md — "Using MySQL" section.
+ */
 import { IPersistenceProvider, WorkflowInstance, EventSubscription, Event, WorkflowStatus, WorkflowConcurrencyError } from "@reactorynet/workflow-es";
 import { Workflow as workflowCollection, Workflow } from "./models/workflow";
 import { Subscription as subscriptionCollection } from "./models/subscription";

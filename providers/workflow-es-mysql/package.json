@@ -1,7 +1,9 @@
 {
   "name": "workflow-es-mysql",
   "version": "1.0.0-beta.0",
-  "description": "MySQL provider for Workflow ES",
+  "description": "MySQL provider for Workflow ES — DEPRECATED. Use @reactorynet/workflow-es-postgres with { dialect: 'mysql' } instead.",
+  "private": true,
+  "deprecated": "This package is deprecated. MySQL support is available through @reactorynet/workflow-es-postgres using { dialect: 'mysql' } (Sequelize 6 is multi-dialect). Install mysql2 as an additional driver alongside pg/pg-hstore.",
   "main": ".build/src/index.js",
   "typings": "./build/src/index.d.ts",
   "scripts": {

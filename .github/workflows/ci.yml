@@ -49,13 +49,13 @@ jobs:
   # Included providers:
   #   workflow-es-sqlite   — build + full conformance (no service needed)
   #   workflow-es-postgres — build + full conformance (postgres:16 service)
-  #   workflow-es-mongodb  — build + PENDING conformance (TODO(C3): driver v6 rewrite)
+  #   workflow-es-mongodb  — build + full conformance (mongo:7 service) [C3]
   #   workflow-es-redis    — build + smoke tests (lock/queue provider, not IPersistenceProvider)
   #
   # Excluded providers (with justification):
-  #   workflow-es-mysql  — EXCLUDED: deprecated under C3 (EOL Sequelize 4 / sequelize-typescript 0.6).
-  #                        TODO(C3): re-evaluate after C3's decision (upgrade or remove).
-  #                        Not in matrix; not built here.
+  #   workflow-es-mysql  — EXCLUDED: deprecated (C3). EOL Sequelize 4 / sequelize-typescript 0.6.
+  #                        MySQL support is preserved as the { dialect: "mysql" } path on
+  #                        workflow-es-postgres (Sequelize 6, multi-dialect). Not built here.
   #   workflow-es-azure  — EXCLUDED: queue/lock stub, out of M8 scope.
   #                        Build-check only if it becomes relevant; not added to this matrix.
   #
