@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es",
-  "version": "2.4.0-reactory.1",
+  "version": "2.4.0-reactory.2",
   "description": "A lightweight workflow engine for Node.js (Reactory fork)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",

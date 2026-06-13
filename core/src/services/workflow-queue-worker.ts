@@ -4,6 +4,7 @@ import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDis
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
+import { DataCodecRunner } from "./data-codec-runner";
 
 @injectable()
 export class WorkflowQueueWorker implements IBackgroundWorker {
@@ -28,6 +29,10 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
 
     @inject(TYPES.IMetrics)
     private metrics: IMetrics;
+
+    // H6 — central at-rest codec boundary.
+    @inject(DataCodecRunner)
+    private codecRunner: DataCodecRunner;
 
     private processTimer: any;
 
@@ -153,6 +158,9 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                     if (!instance)
                         throw new Error(`Workflow ${workflowId} not found`);
 
+                    // H6: decode the opaque payload after read, before the executor sees it.
+                    await self.codecRunner.decodeInstance(instance);
+
                     if (instance.status == WorkflowStatus.Runnable) {
                         let complete = false;
                         let result: WorkflowExecutorResult;
@@ -162,7 +170,12 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                         }
                         finally {
                             try {
+                                // H6: encode immediately before persist, then restore plaintext
+                                // on the in-memory instance (post-processing below reads it, and
+                                // MemoryPersistenceProvider would otherwise hand back ciphertext).
+                                await self.codecRunner.encodeInstance(instance);
                                 await self.persistence.persistWorkflow(instance);
+                                await self.codecRunner.decodeInstance(instance);
                             }
                             catch (persistErr) {
                                 if (persistErr instanceof WorkflowConcurrencyError) {

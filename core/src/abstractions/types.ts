@@ -13,6 +13,7 @@ let TYPES = {
     ILifecycleEventHub: Symbol("ILifecycleEventHub"),
     IMetrics: Symbol("IMetrics"),
     ITracer: Symbol("ITracer"),
+    IDataCodec: Symbol("IDataCodec"),
 };
 
 export { TYPES };

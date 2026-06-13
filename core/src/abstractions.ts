@@ -18,3 +18,4 @@ export * from "./abstractions/lifecycle-events";
 export * from "./abstractions/metrics";
 export * from "./abstractions/tracer";
 export * from "./abstractions/health";
+export * from "./abstractions/data-codec";

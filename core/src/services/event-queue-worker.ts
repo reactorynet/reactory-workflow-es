@@ -4,6 +4,7 @@ import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDis
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
+import { DataCodecRunner } from "./data-codec-runner";
 
 @injectable()
 export class EventQueueWorker implements IBackgroundWorker {
@@ -28,6 +29,10 @@ export class EventQueueWorker implements IBackgroundWorker {
 
     @inject(TYPES.IMetrics)
     private metrics: IMetrics;
+
+    // H6 — central at-rest codec boundary.
+    @inject(DataCodecRunner)
+    private codecRunner: DataCodecRunner;
 
     private processTimer: any;
 
@@ -143,7 +148,14 @@ export class EventQueueWorker implements IBackgroundWorker {
             const gotLock = await self.lockProvider.acquireLock(eventId);                
             if (gotLock) {
                 try {
-                    let evt = await self.persistence.getEvent(eventId);
+                    let stored = await self.persistence.getEvent(eventId);
+                    // H6: decode eventData after read so the plaintext payload is seeded into
+                    // the workflow's execution pointer (below) and seen by the step body. Decode
+                    // onto a shallow copy: a provider (e.g. MemoryPersistenceProvider) may return a
+                    // live reference to the stored event, and decoding it in place would rewrite the
+                    // at-rest bytes back to plaintext. The copy keeps the stored event encoded.
+                    let evt = Object.assign(new Event(), stored);
+                    await self.codecRunner.decodeEvent(evt);
                     if (evt.eventTime <= new Date())
                     {
                         let subs = await self.persistence.getSubscriptions(evt.eventName, evt.eventKey, evt.eventTime);
@@ -176,6 +188,8 @@ export class EventQueueWorker implements IBackgroundWorker {
         if (await self.lockProvider.acquireLock(sub.workflowId)) {
             try {
                 let workflow = await self.persistence.getWorkflowInstance(sub.workflowId);
+                // H6: decode the workflow payload after read before mutating/persisting.
+                await self.codecRunner.decodeInstance(workflow);
                 let pointers = workflow.executionPointers.filter(p => p.eventName == sub.eventName && p.eventKey == sub.eventKey && !p.eventPublished);
                 for (let p of pointers) {
                     p.eventData = evt.eventData;
@@ -183,7 +197,10 @@ export class EventQueueWorker implements IBackgroundWorker {
                     p.active = true;
                 }
                 workflow.nextExecution = 0;
+                // H6: encode before persist, then restore plaintext on the in-memory instance.
+                await self.codecRunner.encodeInstance(workflow);
                 await self.persistence.persistWorkflow(workflow);
+                await self.codecRunner.decodeInstance(workflow);
                 await self.persistence.terminateSubscription(sub.id);
                 // H2 (spec §6.8): re-queue while still holding the workflow lock,
                 // so releaseLock (finally) is the last action; the re-queue occurs

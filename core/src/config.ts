@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { Container, ContainerModule, interfaces, injectable, inject } from "inversify";
-import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, ITracer } from "./abstractions";
-import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger, LifecycleEventHub, NoOpMetrics, NoOpTracer } from "./services";
+import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, ITracer, IDataCodec } from "./abstractions";
+import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger, LifecycleEventHub, NoOpMetrics, NoOpTracer, NullDataCodec, DataCodecRunner } from "./services";
 
 /**
  * Resolve caller-supplied partial options against defaults, validating each field that
@@ -100,6 +100,26 @@ export class WorkflowConfig {
         this.container.rebind<ITracer>(TYPES.ITracer).toConstantValue(service);
     }
 
+    /**
+     * H6 — swap the at-rest data codec (plan §8.1: an implementation gets a useX() setter).
+     * The default NullDataCodec is a no-op (plaintext at rest). Binding an encrypting/redacting
+     * codec transforms WorkflowInstance.data and Event.eventData before they reach any provider
+     * and restores them after read — with no provider source change.
+     */
+    public useDataCodec(service: IDataCodec) {
+        this.container.rebind<IDataCodec>(TYPES.IDataCodec).toConstantValue(service);
+    }
+
+    /**
+     * H6 — override the optional plaintext size guard (bytes; 0 = unlimited). The default is
+     * seeded from WorkflowOptions.dataCodecMaxBytes at configureWorkflow() time; this setter
+     * lets a consumer change it imperatively. Measured on the UTF-8 JSON length of the plaintext
+     * payload before encode; an oversized payload throws at the persist/publish boundary.
+     */
+    public useDataCodecSizeLimit(maxPayloadBytes: number) {
+        this.container.get<DataCodecRunner>(DataCodecRunner).maxPayloadBytes = maxPayloadBytes;
+    }
+
     public usePersistence(service: IPersistenceProvider) {
         this.container.rebind<IPersistenceProvider>(TYPES.IPersistenceProvider).toConstantValue(service);
     }
@@ -155,6 +175,12 @@ export function configureWorkflow(options?: Partial<WorkflowOptions>): WorkflowC
         bind<ILifecycleEventHub>(TYPES.ILifecycleEventHub).to(LifecycleEventHub).inSingletonScope();
         bind<IMetrics>(TYPES.IMetrics).to(NoOpMetrics).inSingletonScope();
         bind<ITracer>(TYPES.ITracer).to(NoOpTracer).inSingletonScope();
+
+        // H6 — at-rest codec seam. Default is the no-op NullDataCodec, so unconfigured
+        // hosts (desktop/dev) persist plaintext with zero behaviour change. The runner is
+        // the single core boundary that applies the bound codec (+ optional size guard).
+        bind<IDataCodec>(TYPES.IDataCodec).to(NullDataCodec).inSingletonScope();
+        bind<DataCodecRunner>(DataCodecRunner).toSelf().inSingletonScope();
 
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(WorkflowQueueWorker);
         bind<IBackgroundWorker>(TYPES.IBackgroundWorker).to(EventQueueWorker);

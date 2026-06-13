@@ -5,6 +5,7 @@ import { WorkflowQueueWorker } from "./workflow-queue-worker";
 import { PollWorker } from "./poll-worker";
 
 import { MemoryPersistenceProvider } from "./memory-persistence-provider";
+import { DataCodecRunner } from "./data-codec-runner";
 import { SingleNodeLockProvider } from "./single-node-lock-provider";
 import { SingleNodeQueueProvider } from "./single-node-queue-provider";
 import { NullLogger } from "./null-logger";
@@ -41,6 +42,10 @@ export class WorkflowHost implements IWorkflowHost {
 
     @inject(TYPES.IMetrics)
     private metrics: IMetrics;
+
+    // H6 — central at-rest codec boundary. Encode before persist, decode after read.
+    @inject(DataCodecRunner)
+    private codecRunner: DataCodecRunner;
 
     private allowSingleNodeProviders: boolean = false;
 
@@ -159,7 +164,12 @@ export class WorkflowHost implements IWorkflowHost {
         let ep = this.pointerFactory.buildGenesisPointer(def);
         wf.executionPointers.push(ep);
         
+        // H6: encode the opaque payload immediately before it crosses to the provider,
+        // then restore plaintext on the in-memory instance (mandatory for MemoryPersistenceProvider's
+        // live-reference / clone-of-ciphertext behaviour and harmless otherwise).
+        await self.codecRunner.encodeInstance(wf);
         let workflowId = await self.persistence.createNewWorkflow(wf);
+        await self.codecRunner.decodeInstance(wf);
         // M5 §6.5: count one started workflow per successful createNewWorkflow,
         // after the instance is persisted. Telemetry never breaks execution.
         try {
@@ -189,6 +199,9 @@ export class WorkflowHost implements IWorkflowHost {
         evt.eventName = eventName;
         evt.eventTime = eventTime;
         evt.isProcessed = false;
+        // H6: encode eventData before it crosses to the provider. eventName/eventKey/eventTime
+        // are NOT touched so subscriptions still match by name/key.
+        await this.codecRunner.encodeEvent(evt);
         let id = await this.persistence.createEvent(evt);
         // M5 §6.6: count one published event. Telemetry never breaks execution.
         try {
@@ -245,10 +258,16 @@ export class WorkflowHost implements IWorkflowHost {
             try {
                 for (let attempt = 0; attempt < 2; attempt++) {
                     let wf = await self.persistence.getWorkflowInstance(id);
+                    // H6: decode the payload after read before it is exposed/mutated.
+                    await self.codecRunner.decodeInstance(wf);
                     if (!mutate(wf))
                         return false;
                     try {
+                        // H6: encode before persist; restore plaintext after so a retry
+                        // re-encodes from plaintext (single application per persist).
+                        await self.codecRunner.encodeInstance(wf);
                         await self.persistence.persistWorkflow(wf);
+                        await self.codecRunner.decodeInstance(wf);
                         return true;
                     }
                     catch (persistErr) {
