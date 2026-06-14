@@ -494,8 +494,11 @@ tenant id as the new trailing argument. Document this in the consumer's upgrade 
 { $set: { tenantId: "default" } })`) for each of `workflows`, `events`, `subscriptions` — only if the
 provider is retained under C3.
 
-**Version bump.** `core/package.json` `2.3.6-reactory.3` → `2.3.6-reactory.4` (additive, backward
-compatible — patch-level reactory bump).
+**Version bump.** Per `upgrade-plan.md` §8.3 the version is bumped at merge time against
+ground-truth, not a baked-in number. At implementation time core was at `2.4.0-reactory.2`; this
+additive change (optional host params + tenant-scoped query methods, backward compatible) bumps it to
+`2.4.0-reactory.3` (continuing the `2.4.0-reactory.N` additive series begun by C1). The earlier
+`2.3.6-reactory.x` figures in this spec were drafted before C1 landed and are superseded.
 
 ## 11. Definition of Done
 
