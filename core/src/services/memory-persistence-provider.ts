@@ -1,5 +1,5 @@
 import { injectable, inject } from "inversify";
-import { IPersistenceProvider, WorkflowConcurrencyError } from "../abstractions";
+import { IPersistenceProvider, WorkflowConcurrencyError, DEFAULT_TENANT } from "../abstractions";
 import { WorkflowInstance, WorkflowStatus, EventSubscription, Event } from "../models";
 
 @injectable()
@@ -11,6 +11,10 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
     public async createNewWorkflow(instance: WorkflowInstance): Promise<string> {
         instance.id = this.generateUID();
         instance.concurrencyToken = 0;
+        // M6: mirror the SQL providers' @Default("default") — an instance created
+        // without a tenant (e.g. directly in the conformance suite) reads as "default".
+        if (instance.tenantId === undefined || instance.tenantId === null)
+            instance.tenantId = DEFAULT_TENANT;
         this.instances.push(this.clone(instance));
         return instance.id;
     }
@@ -43,19 +47,22 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
         return found ? this.clone(found) : found;
     }
 
-    public async getRunnableInstances(): Promise<string[]> {
+    public async getRunnableInstances(tenantId?: string): Promise<string[]> {
         return this.instances
-            .filter(x => x.status === WorkflowStatus.Runnable && x.nextExecution < Date.now())
+            .filter(x => x.status === WorkflowStatus.Runnable && x.nextExecution < Date.now()
+                && (tenantId === undefined || x.tenantId === tenantId))
             .map(x => x.id);
     }
 
     public async createEventSubscription(subscription: EventSubscription): Promise<void> {
         subscription.id = this.generateUID();
+        if (subscription.tenantId === undefined || subscription.tenantId === null)
+            subscription.tenantId = DEFAULT_TENANT;
         this.subscriptions.push(subscription);
     }
 
-    public async getSubscriptions(eventName: string, eventKey: string, asOf: Date): Promise<EventSubscription[]> {
-        return this.subscriptions.filter(x => x.eventName === eventName && x.eventKey === eventKey && x.subscribeAsOf <= asOf);
+    public async getSubscriptions(tenantId: string, eventName: string, eventKey: string, asOf: Date): Promise<EventSubscription[]> {
+        return this.subscriptions.filter(x => x.tenantId === tenantId && x.eventName === eventName && x.eventKey === eventKey && x.subscribeAsOf <= asOf);
     }
 
     public async terminateSubscription(id: string): Promise<void> {
@@ -66,6 +73,8 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
 
     public async createEvent(event: Event): Promise<string> {
         event.id = this.generateUID();
+        if (event.tenantId === undefined || event.tenantId === null)
+            event.tenantId = DEFAULT_TENANT;
         this.events.push(event);
         return event.id;
     }
@@ -74,9 +83,10 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
         return this.events.find(x => x.id === id);
     }
 
-    public async getRunnableEvents(): Promise<string[]> {
+    public async getRunnableEvents(tenantId?: string): Promise<string[]> {
         return this.events
-            .filter(x => !x.isProcessed && x.eventTime <= new Date())
+            .filter(x => !x.isProcessed && x.eventTime <= new Date()
+                && (tenantId === undefined || x.tenantId === tenantId))
             .map(x => x.id);
     }
 
@@ -92,9 +102,9 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
             evt.isProcessed = false;
     }
 
-    public async getEvents(eventName: string, eventKey: unknown, asOf: Date): Promise<string[]> {
+    public async getEvents(tenantId: string, eventName: string, eventKey: unknown, asOf: Date): Promise<string[]> {
         return this.events
-            .filter(x => x.eventName === eventName && x.eventKey === eventKey && x.eventTime >= asOf)
+            .filter(x => x.tenantId === tenantId && x.eventName === eventName && x.eventKey === eventKey && x.eventTime >= asOf)
             .map(x => x.id);
     }
 

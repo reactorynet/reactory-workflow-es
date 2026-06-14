@@ -9,7 +9,8 @@ import {
     Event,
     EventSubscription,
     WorkflowStatus,
-    WorkflowConcurrencyError
+    WorkflowConcurrencyError,
+    DEFAULT_TENANT
 } from "@reactorynet/workflow-es";
 import { SqlitePersistence } from "../src/sqlite-provider";
 
@@ -192,13 +193,13 @@ describe("sqlite-provider conformance", () => {
         });
 
         it("should be retrievable by name/key/asOf", async () => {
-            const found = await persistence.getSubscriptions("test-event", "key-1", new Date());
+            const found = await persistence.getSubscriptions(DEFAULT_TENANT, "test-event", "key-1", new Date());
             expect(found.map((s) => s.id)).toContain(sub.id);
         });
 
         it("should be removable", async () => {
             await persistence.terminateSubscription(sub.id);
-            const found = await persistence.getSubscriptions("test-event", "key-1", new Date());
+            const found = await persistence.getSubscriptions(DEFAULT_TENANT, "test-event", "key-1", new Date());
             expect(found.map((s) => s.id)).not.toContain(sub.id);
         });
 
@@ -442,7 +443,7 @@ describe("sqlite-provider conformance", () => {
             const fresh = new SqlitePersistence(dbFile);
             await fresh.connect;
             try {
-                const subs = await fresh.getSubscriptions("durable-event", "dk", new Date());
+                const subs = await fresh.getSubscriptions(DEFAULT_TENANT, "durable-event", "dk", new Date());
                 expect(subs.map(s => s.id)).toContain(subId);
             } finally {
                 await fresh.sequelize.close();

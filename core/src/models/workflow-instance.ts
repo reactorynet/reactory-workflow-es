@@ -3,6 +3,13 @@ import { ExecutionPointer } from "./execution-pointer";
 export class WorkflowInstance {
 
     public id : string;
+    /**
+     * M6 — tenant / namespace this instance belongs to. Defaults to "default"
+     * (DEFAULT_TENANT) when the host caller omits a tenantId. Stamped by the
+     * host in startWorkflow; copied onto every EventSubscription the instance
+     * creates so subscription matching stays tenant-scoped.
+     */
+    public tenantId : string;
     public workflowDefinitionId : string;
     public version : number;
     public description : string;

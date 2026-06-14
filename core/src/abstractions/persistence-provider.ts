@@ -20,19 +20,41 @@ export interface IPersistenceProvider {
      */
     persistWorkflow(instance: WorkflowInstance): Promise<void>;
     getWorkflowInstance(workflowId: string): Promise<WorkflowInstance>;
-    getRunnableInstances(): Promise<Array<string>>;
+
+    /**
+     * M6 — return ids of runnable instances. When `tenantId` is supplied, only
+     * that tenant's instances are returned; when omitted/undefined, instances
+     * across ALL tenants are returned (used by the tenant-agnostic poll worker,
+     * which only queues ids — the later getWorkflowInstance(id) load is
+     * tenant-correct because the row carries its own tenantId).
+     */
+    getRunnableInstances(tenantId?: string): Promise<Array<string>>;
 
     createEventSubscription(subscription: EventSubscription): Promise<void>;
-    getSubscriptions(eventName: string, eventKey: string, asOf: Date): Promise<Array<EventSubscription>>;
+    /**
+     * M6 — return subscriptions matching (eventName, eventKey, subscribeAsOf<=asOf)
+     * AND tenantId === `tenantId`. The tenant parameter is REQUIRED: it is the
+     * sole runtime enforcement point of cross-tenant isolation (the event→
+     * subscription wake path passes evt.tenantId here).
+     */
+    getSubscriptions(tenantId: string, eventName: string, eventKey: string, asOf: Date): Promise<Array<EventSubscription>>;
     terminateSubscription(id: string): Promise<void>;
 
-    createEvent(event: Event): Promise<string>;    
+    createEvent(event: Event): Promise<string>;
     getEvent(id: string): Promise<Event>;
-    getRunnableEvents(): Promise<Array<string>>;
-    
+    /**
+     * M6 — return ids of runnable events. Tenant semantics identical to
+     * getRunnableInstances: optional/undefined => all tenants (poll worker).
+     */
+    getRunnableEvents(tenantId?: string): Promise<Array<string>>;
+
     markEventProcessed(id: string): Promise<void>;
     markEventUnprocessed(id: string): Promise<void>;
 
-    getEvents(eventName: string, eventKey: any, asOf: Date): Promise<Array<string>>;
+    /**
+     * M6 — return ids of events matching (eventName, eventKey, asOf) AND
+     * tenantId === `tenantId` (required).
+     */
+    getEvents(tenantId: string, eventName: string, eventKey: any, asOf: Date): Promise<Array<string>>;
 
 }

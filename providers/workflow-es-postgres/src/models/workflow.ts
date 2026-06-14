@@ -1,4 +1,4 @@
-import { Table, Column, Default, Model, HasMany, PrimaryKey, DataType, AllowNull } from 'sequelize-typescript';
+import { Table, Column, Default, Model, HasMany, PrimaryKey, DataType, AllowNull, Index } from 'sequelize-typescript';
 import { ExecutionPointer } from './executionPointer';
 
 @Table({
@@ -12,6 +12,14 @@ export class Workflow extends Model {
     @Default(DataType.UUIDV4)
     @Column(DataType.UUID)
     id: string;
+
+    // M6 — tenant / namespace. NOT NULL DEFAULT 'default'; leads the composite
+    // index (tenantId, status, nextExecution) used by getRunnableInstances.
+    @AllowNull(false)
+    @Default("default")
+    @Index
+    @Column(DataType.STRING)
+    tenantId: string;
 
     @Column(DataType.STRING)
     workflowDefinitionId: string;

@@ -1,4 +1,4 @@
-import { Table, Model, Column, Default, PrimaryKey, DataType } from 'sequelize-typescript';
+import { Table, Model, Column, Default, PrimaryKey, DataType, AllowNull, Index } from 'sequelize-typescript';
 
 @Table({
     timestamps: false,
@@ -11,6 +11,13 @@ export class Event extends Model {
     @Default(DataType.UUIDV4)
     @Column(DataType.UUID)
     id: string;
+
+    // M6 — tenant / namespace; leads the (tenantId, eventName, eventKey, eventTime) index.
+    @AllowNull(false)
+    @Default("default")
+    @Index
+    @Column(DataType.STRING)
+    tenantId: string;
 
     @Column(DataType.STRING)
     eventName: string;

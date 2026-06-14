@@ -110,9 +110,13 @@ export class MongoDBPersistence implements IPersistenceProvider {
     }
 
     /** Return ids of Runnable workflows whose nextExecution is in the past. */
-    public async getRunnableInstances(): Promise<Array<string>> {
+    public async getRunnableInstances(tenantId?: string): Promise<Array<string>> {
         const data = await this.workflowCollection
-            .find({ status: WorkflowStatus.Runnable, nextExecution: { $lt: Date.now() } })
+            .find({
+                status: WorkflowStatus.Runnable,
+                nextExecution: { $lt: Date.now() },
+                ...(tenantId !== undefined ? { tenantId } : {})
+            })
             .project({ _id: 1 })
             .toArray();
         return data.map((item) => item._id.toString());
@@ -126,12 +130,13 @@ export class MongoDBPersistence implements IPersistenceProvider {
     }
 
     public async getSubscriptions(
+        tenantId: string,
         eventName: string,
         eventKey: string,
         asOf: Date
     ): Promise<Array<EventSubscription>> {
         const data = await this.subscriptionCollection
-            .find({ eventName, eventKey, subscribeAsOf: { $lt: asOf } })
+            .find({ tenantId, eventName, eventKey, subscribeAsOf: { $lt: asOf } })
             .toArray();
         return data.map((item) => {
             (item as any).id = item._id.toString();
@@ -170,9 +175,13 @@ export class MongoDBPersistence implements IPersistenceProvider {
     }
 
     /** Return ids of unprocessed events whose eventTime is in the past. */
-    public async getRunnableEvents(): Promise<Array<string>> {
+    public async getRunnableEvents(tenantId?: string): Promise<Array<string>> {
         const data = await this.eventCollection
-            .find({ isProcessed: false, eventTime: { $lt: new Date() } })
+            .find({
+                isProcessed: false,
+                eventTime: { $lt: new Date() },
+                ...(tenantId !== undefined ? { tenantId } : {})
+            })
             .project({ _id: 1 })
             .toArray();
         return data.map((item) => item._id.toString());
@@ -198,9 +207,9 @@ export class MongoDBPersistence implements IPersistenceProvider {
         );
     }
 
-    public async getEvents(eventName: string, eventKey: any, asOf: Date): Promise<Array<string>> {
+    public async getEvents(tenantId: string, eventName: string, eventKey: any, asOf: Date): Promise<Array<string>> {
         const data = await this.eventCollection
-            .find({ eventName, eventKey, eventTime: { $gt: asOf } })
+            .find({ tenantId, eventName, eventKey, eventTime: { $gt: asOf } })
             .project({ _id: 1 })
             .toArray();
         return data.map((item) => item._id.toString());

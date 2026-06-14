@@ -1,4 +1,4 @@
-import { WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, configureWorkflow } from "../../src";
+import { WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, configureWorkflow, DEFAULT_TENANT } from "../../src";
 import { IDataCodec, DataCodecContext } from "../../src/abstractions";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
 import { DataCodecRunner } from "../../src/services/data-codec-runner";
@@ -124,7 +124,7 @@ describe("H6 at-rest data codec", () => {
             await host.start();
             workflowId = await host.startWorkflow("data-codec-wait-workflow", 1, {});
             await spinWait(async () => {
-                let subs = await persistence.getSubscriptions("dc-event", "0", new Date());
+                let subs = await persistence.getSubscriptions(DEFAULT_TENANT, "dc-event", "0", new Date());
                 return subs.length > 0;
             });
             await host.publishEvent("dc-event", "0", { token: "abc" }, new Date());
@@ -138,12 +138,12 @@ describe("H6 at-rest data codec", () => {
 
         it("matches the subscription by plaintext eventName/eventKey", async () => {
             // getEvents matches on plaintext eventName/eventKey with a codec configured.
-            const eventIds = await persistence.getEvents("dc-event", "0", new Date(Date.now() - 60000));
+            const eventIds = await persistence.getEvents(DEFAULT_TENANT, "dc-event", "0", new Date(Date.now() - 60000));
             expect(eventIds.length).toBeGreaterThan(0);
         });
 
         it("stores eventName plaintext but eventData encoded", async () => {
-            const eventIds = await persistence.getEvents("dc-event", "0", new Date(Date.now() - 60000));
+            const eventIds = await persistence.getEvents(DEFAULT_TENANT, "dc-event", "0", new Date(Date.now() - 60000));
             const evt = await persistence.getEvent(eventIds[0]);
             expect(evt.eventName).toBe("dc-event");
             expect(evt.eventData.__fake_enc).toBe(true);

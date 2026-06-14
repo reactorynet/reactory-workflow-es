@@ -1,7 +1,7 @@
 import {
     configureWorkflow, WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody,
     StepExecutionContext, ExecutionResult, WorkflowInstance, WorkflowErrorHandling,
-    METRIC_NAMES, SPAN_NAMES, ATTR, HealthStatus, NoOpMetrics, NoOpTracer, TYPES, IMetrics, ITracer
+    METRIC_NAMES, SPAN_NAMES, ATTR, HealthStatus, NoOpMetrics, NoOpTracer, TYPES, IMetrics, ITracer, DEFAULT_TENANT
 } from "../../src";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
 import { spinWait } from "../helpers/spin-wait";
@@ -186,7 +186,7 @@ describe("observability - event counter and gauges", () => {
         await host.start();
         workflowId = await host.startWorkflow("obs-gauge-workflow", 1, {});
         await spinWait(async () => {
-            const subs = await persistence.getSubscriptions("obs-event", "0", new Date());
+            const subs = await persistence.getSubscriptions(DEFAULT_TENANT, "obs-event", "0", new Date());
             return subs.length > 0;
         });
         await host.publishEvent("obs-event", "0", "Pass", new Date());

@@ -1,6 +1,6 @@
 import { injectable, inject, multiInject } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, METRIC_NAMES, ATTR, HealthStatus, HealthReport, ComponentHealth, isHealthProbe, IHealthProbe } from "../abstractions";
+import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, METRIC_NAMES, ATTR, HealthStatus, HealthReport, ComponentHealth, isHealthProbe, IHealthProbe, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
 import { WorkflowQueueWorker } from "./workflow-queue-worker";
 import { PollWorker } from "./poll-worker";
 
@@ -149,10 +149,12 @@ export class WorkflowHost implements IWorkflowHost {
         return configured;
     }
     
-    public async startWorkflow(id: string, version: number, data: any = {}): Promise<string> {
+    public async startWorkflow(id: string, version: number, data: any = {}, tenantId: string = DEFAULT_TENANT): Promise<string> {
         let self = this;
         let def = self.registry.getDefinition(id, version);
         let wf = new WorkflowInstance();
+        // M6: coerce a falsy tenant to the sentinel so the instance is always scoped.
+        wf.tenantId = tenantId || DEFAULT_TENANT;
         wf.data = data;
         wf.description = def.description;
         wf.workflowDefinitionId = def.id;
@@ -188,12 +190,14 @@ export class WorkflowHost implements IWorkflowHost {
         this.registry.registerWorkflow<TData>(new workflow());
     }
 
-    public async publishEvent(eventName: string, eventKey: string, eventData: any, eventTime: Date): Promise<void> {
-        //todo: check host status        
+    public async publishEvent(eventName: string, eventKey: string, eventData: any, eventTime: Date, tenantId: string = DEFAULT_TENANT): Promise<void> {
+        //todo: check host status
 
         this.logger.info("Publishing event %s %s", eventName, eventKey);
 
         let evt = new Event();
+        // M6: coerce a falsy tenant to the sentinel so the event is always scoped.
+        evt.tenantId = tenantId || DEFAULT_TENANT;
         evt.eventData = eventData;
         evt.eventKey = eventKey;
         evt.eventName = eventName;
@@ -250,8 +254,14 @@ export class WorkflowHost implements IWorkflowHost {
      */
     private async mutateWorkflowStatus(verb: string, id: string, mutate: (wf: WorkflowInstance) => boolean): Promise<boolean> {
         let self = this;
+        // M6 §5: suspend/resume/terminate take only (id) and have no tenant context.
+        // The id is a globally-unique UUID and the lock is paired (acquire+release with
+        // the same key) within this method, so namespacing with the DEFAULT_TENANT
+        // prefix keeps the key SHAPE consistent codebase-wide without changing the public
+        // signature of these three methods.
+        const lockKey = tenantLockKey(DEFAULT_TENANT, id);
         try {
-            let gotLock = await self.lockProvider.acquireLock(id);
+            let gotLock = await self.lockProvider.acquireLock(lockKey);
             if (!gotLock)
                 return false;
 
@@ -281,7 +291,7 @@ export class WorkflowHost implements IWorkflowHost {
                 return false;
             }
             finally {
-                self.lockProvider.releaseLock(id);
+                self.lockProvider.releaseLock(lockKey);
             }
         }
         catch (err) {

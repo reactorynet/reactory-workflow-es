@@ -77,6 +77,9 @@ export class RedisLockManager implements IDistributedLockProvider {
     }
 
     private resourceKey(id: string): string {
+        // M6: `id` arrives already tenant-namespaced (`tenant:resourceId`) from the
+        // core workers; it is opaque here and used verbatim as the Redlock resource
+        // name. ':' is a legal Redis key character, so no sanitisation is needed.
         return `wes:lock:${id}`;
     }
 }

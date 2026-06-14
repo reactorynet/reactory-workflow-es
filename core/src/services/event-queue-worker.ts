@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
@@ -145,10 +145,19 @@ export class EventQueueWorker implements IBackgroundWorker {
 
     private async processEvent(self: EventQueueWorker, eventId: string): Promise<void> {
         try {
-            const gotLock = await self.lockProvider.acquireLock(eventId);                
+            // M6: read the event up front (by globally-unique id) so its tenant is known,
+            // then namespace the event lock by that tenant (§6.8). Two tenants can never
+            // share a lock key for the same underlying id.
+            let stored = await self.persistence.getEvent(eventId);
+            if (!stored) {
+                self.logger.log("Event not found: " + eventId);
+                return;
+            }
+            const tenantId = stored.tenantId || DEFAULT_TENANT;
+            const eventLockKey = tenantLockKey(tenantId, eventId);
+            const gotLock = await self.lockProvider.acquireLock(eventLockKey);
             if (gotLock) {
                 try {
-                    let stored = await self.persistence.getEvent(eventId);
                     // H6: decode eventData after read so the plaintext payload is seeded into
                     // the workflow's execution pointer (below) and seen by the step body. Decode
                     // onto a shallow copy: a provider (e.g. MemoryPersistenceProvider) may return a
@@ -158,7 +167,9 @@ export class EventQueueWorker implements IBackgroundWorker {
                     await self.codecRunner.decodeEvent(evt);
                     if (evt.eventTime <= new Date())
                     {
-                        let subs = await self.persistence.getSubscriptions(evt.eventName, evt.eventKey, evt.eventTime);
+                        // M6 §6.5: scope subscription matching by the event's tenant — the
+                        // sole runtime enforcement point of cross-tenant isolation.
+                        let subs = await self.persistence.getSubscriptions(tenantId, evt.eventName, evt.eventKey, evt.eventTime);
                         let success = true;
 
                         for (let sub of subs)
@@ -167,15 +178,15 @@ export class EventQueueWorker implements IBackgroundWorker {
                         if (success)
                             await self.persistence.markEventProcessed(eventId);
                     }
-                                        
+
                 }
                 finally {
-                    await self.lockProvider.releaseLock(eventId);                    
-                }                
+                    await self.lockProvider.releaseLock(eventLockKey);
+                }
             }
             else {
                 self.logger.log("Event locked: " + eventId);
-            }   
+            }
         }
         catch (err) {
             const error = toError(err);
@@ -184,8 +195,10 @@ export class EventQueueWorker implements IBackgroundWorker {
     }
 
     private async seedSubscription(self: EventQueueWorker, evt: Event, sub: EventSubscription): Promise<boolean> {
-        
-        if (await self.lockProvider.acquireLock(sub.workflowId)) {
+
+        // M6 §6.8: namespace the workflow lock by the subscription's tenant.
+        const wfLockKey = tenantLockKey(sub.tenantId || DEFAULT_TENANT, sub.workflowId);
+        if (await self.lockProvider.acquireLock(wfLockKey)) {
             try {
                 let workflow = await self.persistence.getWorkflowInstance(sub.workflowId);
                 // H6: decode the workflow payload after read before mutating/persisting.
@@ -214,7 +227,7 @@ export class EventQueueWorker implements IBackgroundWorker {
                 return false;
             }
             finally {
-                await self.lockProvider.releaseLock(sub.workflowId);
+                await self.lockProvider.releaseLock(wfLockKey);
             }
         }
         else {

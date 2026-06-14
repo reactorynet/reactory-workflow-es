@@ -1,6 +1,7 @@
 import {
     WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext,
-    ExecutionResult, configureWorkflow, IDistributedLockProvider, WorkflowOptions
+    ExecutionResult, configureWorkflow, IDistributedLockProvider, WorkflowOptions,
+    DEFAULT_TENANT, tenantLockKey
 } from "../../src";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
 import { spinWait } from "../helpers/spin-wait";
@@ -120,16 +121,20 @@ describe("graceful shutdown", () => {
         const workflowId = await host.startWorkflow("graceful-shutdown-blocking", 1, {});
         await spinWait(async () => gate.entered);
 
+        // M6: the worker namespaces lock keys by tenant; a single-tenant flow
+        // uses the DEFAULT_TENANT prefix.
+        const lockKey = tenantLockKey(DEFAULT_TENANT, workflowId);
+
         // Mid-flight, the execution holds the workflow lock.
-        expect(lock.isHeld(workflowId)).toBe(true);
+        expect(lock.isHeld(lockKey)).toBe(true);
 
         gate.release!();
         await host.stop();
 
         // The execution finished inside the timeout, so its own finally
         // released the lock — a fresh acquire must succeed.
-        expect(await lock.acquireLock(workflowId)).toBe(true);
-        await lock.releaseLock(workflowId);
+        expect(await lock.acquireLock(lockKey)).toBe(true);
+        await lock.releaseLock(lockKey);
     });
 
     it("force-stop after timeout resolves without hanging", async () => {

@@ -31,6 +31,7 @@ import { EventSubscription } from "../../models/event-subscription";
 import { Event } from "../../models/event";
 import { WorkflowStatus } from "../../models/workflow-status";
 import { WorkflowConcurrencyError } from "../../abstractions/errors";
+import { DEFAULT_TENANT } from "../../abstractions/types";
 
 export interface PersistenceConformanceOptions {
     /**
@@ -282,23 +283,23 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             });
 
             it("§6.6 getSubscriptions returns sub for matching name/key with asOf <= subscribeAsOf", async () => {
-                const found = await provider.getSubscriptions("conf-event", "conf-key", new Date());
+                const found = await provider.getSubscriptions(DEFAULT_TENANT, "conf-event", "conf-key", new Date());
                 expect(found.map(s => s.id)).toContain(sub.id);
             });
 
             it("§6.6 getSubscriptions excludes subs with non-matching eventName", async () => {
-                const found = await provider.getSubscriptions("other-event", "conf-key", new Date());
+                const found = await provider.getSubscriptions(DEFAULT_TENANT, "other-event", "conf-key", new Date());
                 expect(found.map(s => s.id)).not.toContain(sub.id);
             });
 
             it("§6.6 getSubscriptions excludes subs with non-matching eventKey", async () => {
-                const found = await provider.getSubscriptions("conf-event", "other-key", new Date());
+                const found = await provider.getSubscriptions(DEFAULT_TENANT, "conf-event", "other-key", new Date());
                 expect(found.map(s => s.id)).not.toContain(sub.id);
             });
 
             it("§6.7 terminateSubscription removes the sub from future queries", async () => {
                 await provider.terminateSubscription(sub.id);
-                const found = await provider.getSubscriptions("conf-event", "conf-key", new Date());
+                const found = await provider.getSubscriptions(DEFAULT_TENANT, "conf-event", "conf-key", new Date());
                 expect(found.map(s => s.id)).not.toContain(sub.id);
             });
         });
@@ -414,22 +415,22 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             });
 
             it("returns the id for matching name/key with asOf <= eventTime", async () => {
-                const ids = await provider.getEvents("conf-filter-ev", "fk", new Date(0));
+                const ids = await provider.getEvents(DEFAULT_TENANT, "conf-filter-ev", "fk", new Date(0));
                 expect(ids).toContain(evId);
             });
 
             it("excludes events whose eventTime is before asOf", async () => {
-                const ids = await provider.getEvents("conf-filter-ev", "fk", new Date(evTime.getTime() + 1));
+                const ids = await provider.getEvents(DEFAULT_TENANT, "conf-filter-ev", "fk", new Date(evTime.getTime() + 1));
                 expect(ids).not.toContain(evId);
             });
 
             it("excludes events with non-matching eventName", async () => {
-                const ids = await provider.getEvents("other-name", "fk", new Date(0));
+                const ids = await provider.getEvents(DEFAULT_TENANT, "other-name", "fk", new Date(0));
                 expect(ids).not.toContain(evId);
             });
 
             it("excludes events with non-matching eventKey", async () => {
-                const ids = await provider.getEvents("conf-filter-ev", "other-key", new Date(0));
+                const ids = await provider.getEvents(DEFAULT_TENANT, "conf-filter-ev", "other-key", new Date(0));
                 expect(ids).not.toContain(evId);
             });
         });
@@ -530,6 +531,114 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 const stored = await provider.getWorkflowInstance(wf.id);
                 expect(stored.concurrencyToken).toEqual(1);
                 expect(stored.data).toEqual({ winner: "a" });
+            });
+        });
+
+        // ── M6 Tenant isolation ───────────────────────────────────────────────
+        // Every provider must prove it scopes the multi-row query methods by tenant.
+
+        describe("M6 tenant isolation", () => {
+            const asOf = new Date();
+            let subA: EventSubscription;
+            let subB: EventSubscription;
+
+            beforeAll(async () => {
+                // Two subscriptions with IDENTICAL (eventName, eventKey) in different tenants.
+                subA = new EventSubscription();
+                subA.tenantId = "tenant-A";
+                subA.workflowId = "00000000-0000-4000-8000-00000000000a";
+                subA.stepId = 0;
+                subA.eventName = "m6-shared-event";
+                subA.eventKey = "m6-shared-key";
+                subA.subscribeAsOf = new Date(0);
+                await provider.createEventSubscription(subA);
+
+                subB = new EventSubscription();
+                subB.tenantId = "tenant-B";
+                subB.workflowId = "00000000-0000-4000-8000-00000000000b";
+                subB.stepId = 0;
+                subB.eventName = "m6-shared-event";
+                subB.eventKey = "m6-shared-key";
+                subB.subscribeAsOf = new Date(0);
+                await provider.createEventSubscription(subB);
+
+                // Two events with the SAME (eventName, eventKey) in different tenants.
+                const evA = new Event();
+                evA.tenantId = "tenant-A";
+                evA.eventName = "m6-shared-event";
+                evA.eventKey = "m6-shared-key";
+                evA.eventData = { for: "A" };
+                evA.eventTime = new Date(0);
+                evA.isProcessed = false;
+                await provider.createEvent(evA);
+
+                const evB = new Event();
+                evB.tenantId = "tenant-B";
+                evB.eventName = "m6-shared-event";
+                evB.eventKey = "m6-shared-key";
+                evB.eventData = { for: "B" };
+                evB.eventTime = new Date(0);
+                evB.isProcessed = false;
+                await provider.createEvent(evB);
+            });
+
+            it("getSubscriptions(tenant-A, ...) returns ONLY tenant-A's subscription", async () => {
+                const found = await provider.getSubscriptions("tenant-A", "m6-shared-event", "m6-shared-key", asOf);
+                const ids = found.map(s => s.id);
+                expect(ids).toContain(subA.id);
+                expect(ids).not.toContain(subB.id);
+            });
+
+            it("getSubscriptions(tenant-B, ...) returns ONLY tenant-B's subscription", async () => {
+                const found = await provider.getSubscriptions("tenant-B", "m6-shared-event", "m6-shared-key", asOf);
+                const ids = found.map(s => s.id);
+                expect(ids).toContain(subB.id);
+                expect(ids).not.toContain(subA.id);
+            });
+
+            it("getSubscriptions for an unrelated tenant returns neither", async () => {
+                const found = await provider.getSubscriptions("tenant-Z", "m6-shared-event", "m6-shared-key", asOf);
+                const ids = found.map(s => s.id);
+                expect(ids).not.toContain(subA.id);
+                expect(ids).not.toContain(subB.id);
+            });
+
+            it("getEvents(tenant-A, ...) and (tenant-B, ...) each return only their own event", async () => {
+                const aIds = await provider.getEvents("tenant-A", "m6-shared-event", "m6-shared-key", new Date(0));
+                const bIds = await provider.getEvents("tenant-B", "m6-shared-event", "m6-shared-key", new Date(0));
+                // Each tenant sees exactly one matching event, and the two id sets are disjoint.
+                expect(aIds.length).toBeGreaterThan(0);
+                expect(bIds.length).toBeGreaterThan(0);
+                for (const id of aIds)
+                    expect(bIds).not.toContain(id);
+            });
+
+            it("getRunnableInstances(tenant) scopes by tenant; undefined returns across tenants", async () => {
+                const wfA = new WorkflowInstance();
+                wfA.tenantId = "tenant-A";
+                wfA.workflowDefinitionId = "m6-runnable";
+                wfA.version = 1;
+                wfA.status = WorkflowStatus.Runnable;
+                wfA.nextExecution = 0;
+                wfA.data = {};
+                await provider.createNewWorkflow(wfA);
+
+                const wfB = new WorkflowInstance();
+                wfB.tenantId = "tenant-B";
+                wfB.workflowDefinitionId = "m6-runnable";
+                wfB.version = 1;
+                wfB.status = WorkflowStatus.Runnable;
+                wfB.nextExecution = 0;
+                wfB.data = {};
+                await provider.createNewWorkflow(wfB);
+
+                const scopedA = await provider.getRunnableInstances("tenant-A");
+                expect(scopedA).toContain(wfA.id);
+                expect(scopedA).not.toContain(wfB.id);
+
+                const all = await provider.getRunnableInstances();
+                expect(all).toContain(wfA.id);
+                expect(all).toContain(wfB.id);
             });
         });
 

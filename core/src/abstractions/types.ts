@@ -17,3 +17,11 @@ let TYPES = {
 };
 
 export { TYPES };
+
+/**
+ * M6 — multi-tenancy sentinel. When a host caller omits `tenantId`, the engine
+ * stamps this value on the created WorkflowInstance/Event/EventSubscription so
+ * single-tenant / Electron deployments behave exactly as before. It is a plain
+ * exported constant, NOT a configurable value (no `configureWorkflow` option).
+ */
+export const DEFAULT_TENANT = "default";

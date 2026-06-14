@@ -23,23 +23,36 @@ export class InstrumentedLockProvider implements IDistributedLockProvider {
     private held: Set<string> = new Set<string>();
 
     public async acquireLock(id: string): Promise<boolean> {
+        // M6: lock keys are tenant-namespaced (`tenant:resourceId`). Markers are
+        // keyed by the bare RESOURCE id so they correlate with custom markers
+        // (requeue:<id> / subscribe:<workflowId>) that use the bare id, and with
+        // onAcquired's resource-id comparison. Mutual exclusion still uses the
+        // full namespaced key (`held` set), so two tenants on the same resource
+        // do not collide.
+        const resourceId = this.resourceId(id);
         if (this.held.has(id)) {
-            this.mark(`acquire-denied:${id}`);
+            this.mark(`acquire-denied:${resourceId}`);
             return false;
         }
         this.held.add(id);
-        this.mark(`acquire:${id}`);
-        await this.onAcquired(id);
+        this.mark(`acquire:${resourceId}`);
+        await this.onAcquired(resourceId);
         return true;
     }
 
     public async releaseLock(id: string): Promise<void> {
         this.held.delete(id);
-        this.mark(`release:${id}`);
+        this.mark(`release:${this.resourceId(id)}`);
     }
 
     public isHeld(id: string): boolean {
         return this.held.has(id);
+    }
+
+    /** Strip a leading `tenant:` namespace from a lock key, leaving the bare id. */
+    private resourceId(id: string): string {
+        const idx = id.indexOf(":");
+        return idx === -1 ? id : id.slice(idx + 1);
     }
 
     /** Push a marker into the shared order log (no-op when not recording). */

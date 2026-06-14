@@ -18,7 +18,8 @@ import {
     StepBody,
     StepExecutionContext,
     ExecutionResult,
-    configureWorkflow
+    configureWorkflow,
+    DEFAULT_TENANT
 } from "@reactorynet/workflow-es";
 import { SqlitePersistence } from "../src/sqlite-provider";
 
@@ -111,7 +112,7 @@ describe("sqlite-restart", () => {
 
         // Wait until the subscription for "resume-event" exists on disk — proves state hit disk.
         await spinWait(async () => {
-            const subs = await persistence1.getSubscriptions("resume-event", "0", new Date());
+            const subs = await persistence1.getSubscriptions(DEFAULT_TENANT, "resume-event", "0", new Date());
             return subs.length > 0;
         });
 

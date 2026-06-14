@@ -1,7 +1,7 @@
 import {
     WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext,
     ExecutionResult, configureWorkflow, IQueueProvider, QueueType, TYPES,
-    IBackgroundWorker, EventSubscription
+    IBackgroundWorker, EventSubscription, DEFAULT_TENANT
 } from "../../src";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
 import { spinWait } from "../helpers/spin-wait";
@@ -94,7 +94,7 @@ describe("h2 lock-release race — ordering", () => {
         lock.recording = true;
 
         await spinWait(async () => {
-            const subs = await persistence.getSubscriptions("h2-event", "k", new Date());
+            const subs = await persistence.getSubscriptions(DEFAULT_TENANT, "h2-event", "k", new Date());
             return subs.some(s => s.workflowId === workflowId);
         });
 
@@ -207,7 +207,7 @@ describe("h2 lock-release race — contention and idempotency", () => {
         await queue.queueForProcessing(workflowId, QueueType.Workflow);
 
         await spinWait(async () => {
-            const subs = await persistence.getSubscriptions("h2-event-2", "k2", new Date());
+            const subs = await persistence.getSubscriptions(DEFAULT_TENANT, "h2-event-2", "k2", new Date());
             return subs.some(s => s.workflowId === workflowId);
         });
     });
@@ -227,7 +227,7 @@ describe("h2 lock-release race — contention and idempotency", () => {
 
     it("h2: subscriptions are created exactly once under duplicate processing", async () => {
         expect(createCounts.get(workflowId) || 0).toBe(1);
-        const subs = await persistence.getSubscriptions("h2-event-2", "k2", new Date());
+        const subs = await persistence.getSubscriptions(DEFAULT_TENANT, "h2-event-2", "k2", new Date());
         expect(subs.filter(s => s.workflowId === workflowId).length).toBe(1);
     });
 });
@@ -266,7 +266,7 @@ describe("h2 subscription idempotency guard (rule 5)", () => {
         await worker.subscribeEvent(worker, makeSub());
 
         expect(createCalls).toBe(1);
-        const stored = await persistence.getSubscriptions("h2-guard-event", "gk", asOf);
+        const stored = await persistence.getSubscriptions(DEFAULT_TENANT, "h2-guard-event", "gk", asOf);
         expect(stored.filter(s => s.workflowId === "h2-guard-wf").length).toBe(1);
     });
 });

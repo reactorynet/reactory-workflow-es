@@ -1,5 +1,5 @@
 import { injectable, inject } from "inversify";
-import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, IExecutionPointerFactory, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED } from "../abstractions";
+import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, IExecutionPointerFactory, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED, DEFAULT_TENANT } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, ExecutionPointer, PointerStatus, ExecutionResult, WorkflowDefinition, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult, EventSubscription } from "../models";
 const isNullOrUndefined = (val: any): val is null | undefined => val === null || val === undefined;
@@ -35,6 +35,9 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
             pointer.status = PointerStatus.WaitingForEvent;
 
             let subscription = new EventSubscription();
+            // M6: inherit the tenant of the owning instance so subscription matching
+            // stays tenant-scoped (defaults to "default" for single-tenant flows).
+            subscription.tenantId = instance.tenantId || DEFAULT_TENANT;
             subscription.workflowId = instance.id;
             subscription.stepId = pointer.stepId;
             subscription.eventName = pointer.eventName;

@@ -14,9 +14,18 @@ export interface IWorkflowHost {
      * `app.on('before-quit', async (e) => { e.preventDefault(); await host.stop(); app.exit(); })`.
      */
     stop(): Promise<void>;
-    startWorkflow(id: string, version: number, data: any): Promise<string>;    
+    /**
+     * Start a workflow instance. M6: `tenantId` is OPTIONAL and defaults to
+     * "default" (DEFAULT_TENANT); existing 3-arg callers are unaffected. The
+     * tenant is stamped onto the created WorkflowInstance.
+     */
+    startWorkflow(id: string, version: number, data: any, tenantId?: string): Promise<string>;
     registerWorkflow<TData>(workflow: new () => WorkflowBase<TData>): void;
-    publishEvent(eventName: string, eventKey: string, eventData: any, eventTime: Date): Promise<void>;
+    /**
+     * Publish an external event. M6: `tenantId` is OPTIONAL and defaults to
+     * "default"; the event only wakes subscriptions in the same tenant.
+     */
+    publishEvent(eventName: string, eventKey: string, eventData: any, eventTime: Date, tenantId?: string): Promise<void>;
     suspendWorkflow(id: string): Promise<boolean>;
     resumeWorkflow(id: string): Promise<boolean>;
     terminateWorkflow(id: string): Promise<boolean>;

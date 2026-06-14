@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event, WorkflowExecutorResult } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowConcurrencyError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowConcurrencyError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
@@ -147,7 +147,13 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
 
     private async processWorkflow(self: WorkflowQueueWorker, workflowId: string): Promise<void> {
         try {
-            const gotLock = await self.lockProvider.acquireLock(workflowId);
+            // M6 §6.8: read the instance up front (by globally-unique id) to learn its
+            // tenant, then namespace the workflow lock by that tenant. The authoritative
+            // load-execute-persist still happens INSIDE the lock below.
+            const preview = await self.persistence.getWorkflowInstance(workflowId);
+            const tenantId = (preview && preview.tenantId) || DEFAULT_TENANT;
+            const wfLockKey = tenantLockKey(tenantId, workflowId);
+            const gotLock = await self.lockProvider.acquireLock(wfLockKey);
             if (gotLock) {
                 // H2 (spec §6.1/.2): everything state-derived — load, execute, persist,
                 // subscription creation, event seeding, and the re-queue decision —
@@ -208,7 +214,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                     }
                 }
                 finally {
-                    await self.lockProvider.releaseLock(workflowId);
+                    await self.lockProvider.releaseLock(wfLockKey);
                 }
             }
             else {
@@ -227,12 +233,14 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
         // H2 (spec §6.5): at-most-once per (workflowId, eventName, eventKey,
         // subscribeAsOf). If the subscription already exists, the event-seeding
         // below already ran when it was first created — skip both.
-        const existing = await self.persistence.getSubscriptions(subscription.eventName, subscription.eventKey, subscription.subscribeAsOf);
+        // M6: scope existence/event lookups by the subscription's tenant.
+        const subTenant = subscription.tenantId || DEFAULT_TENANT;
+        const existing = await self.persistence.getSubscriptions(subTenant, subscription.eventName, subscription.eventKey, subscription.subscribeAsOf);
         if (existing.some(s => s.workflowId === subscription.workflowId))
             return;
 
         await self.persistence.createEventSubscription(subscription);
-        let events = await self.persistence.getEvents(subscription.eventName, subscription.eventKey, subscription.subscribeAsOf);
+        let events = await self.persistence.getEvents(subTenant, subscription.eventName, subscription.eventKey, subscription.subscribeAsOf);
         for (let evt of events) {
             await self.persistence.markEventUnprocessed(evt);
             await self.queueProvider.queueForProcessing(evt, QueueType.Event);

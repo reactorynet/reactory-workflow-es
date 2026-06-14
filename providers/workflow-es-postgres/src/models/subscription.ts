@@ -1,4 +1,4 @@
-import { Table, Model, Column, Default, PrimaryKey, DataType } from 'sequelize-typescript';
+import { Table, Model, Column, Default, PrimaryKey, DataType, AllowNull, Index } from 'sequelize-typescript';
 
 @Table({
     timestamps: false,
@@ -11,6 +11,13 @@ export class Subscription extends Model {
     @Default(DataType.UUIDV4)
     @Column(DataType.UUID)
     id: string;
+
+    // M6 — tenant / namespace; leads the (tenantId, eventName, eventKey) index.
+    @AllowNull(false)
+    @Default("default")
+    @Index
+    @Column(DataType.STRING)
+    tenantId: string;
 
     // EventSubscription.workflowId is a plain string id in the core domain model.
     @Column(DataType.UUID)

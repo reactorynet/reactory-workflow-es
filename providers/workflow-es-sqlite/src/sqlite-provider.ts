@@ -129,11 +129,12 @@ export class SqlitePersistence implements IPersistenceProvider {
         return this.toWorkflowInstance(workflow);
     }
 
-    public async getRunnableInstances(): Promise<Array<string>> {
+    public async getRunnableInstances(tenantId?: string): Promise<Array<string>> {
         const instances = await Workflow.findAll({
             where: {
                 status: WorkflowStatus.Runnable,
-                nextExecution: { [Op.lt]: Date.now() }
+                nextExecution: { [Op.lt]: Date.now() },
+                ...(tenantId !== undefined ? { tenantId } : {})
             },
             attributes: ["id"]
         });
@@ -145,9 +146,10 @@ export class SqlitePersistence implements IPersistenceProvider {
         subscription.id = created.id.toString();
     }
 
-    public async getSubscriptions(eventName: string, eventKey: string, asOf: Date): Promise<Array<EventSubscription>> {
+    public async getSubscriptions(tenantId: string, eventName: string, eventKey: string, asOf: Date): Promise<Array<EventSubscription>> {
         const subscriptions = await Subscription.findAll({
             where: {
+                tenantId: tenantId,
                 eventName: eventName,
                 eventKey: eventKey,
                 subscribeAsOf: { [Op.lte]: asOf }
@@ -174,11 +176,12 @@ export class SqlitePersistence implements IPersistenceProvider {
         return this.toEvent(event);
     }
 
-    public async getRunnableEvents(): Promise<Array<string>> {
+    public async getRunnableEvents(tenantId?: string): Promise<Array<string>> {
         const events = await EventModel.findAll({
             where: {
                 isProcessed: false,
-                eventTime: { [Op.lte]: new Date() }
+                eventTime: { [Op.lte]: new Date() },
+                ...(tenantId !== undefined ? { tenantId } : {})
             },
             attributes: ["id"]
         });
@@ -193,9 +196,10 @@ export class SqlitePersistence implements IPersistenceProvider {
         await EventModel.update({ isProcessed: false }, { where: { id: id } });
     }
 
-    public async getEvents(eventName: string, eventKey: any, asOf: Date): Promise<Array<string>> {
+    public async getEvents(tenantId: string, eventName: string, eventKey: any, asOf: Date): Promise<Array<string>> {
         const events = await EventModel.findAll({
             where: {
+                tenantId: tenantId,
                 eventName: eventName,
                 eventKey: eventKey,
                 eventTime: { [Op.gte]: asOf }
@@ -211,6 +215,7 @@ export class SqlitePersistence implements IPersistenceProvider {
     private toWorkflowInstance(model: Workflow): WorkflowInstance {
         const instance = new WorkflowInstance();
         instance.id = model.id;
+        instance.tenantId = model.tenantId;
         instance.workflowDefinitionId = model.workflowDefinitionId;
         instance.version = model.version;
         instance.description = model.description;
@@ -253,6 +258,7 @@ export class SqlitePersistence implements IPersistenceProvider {
     private toEventSubscription(model: Subscription): EventSubscription {
         const subscription = new EventSubscription();
         subscription.id = model.id;
+        subscription.tenantId = model.tenantId;
         subscription.workflowId = model.workflowId;
         subscription.stepId = model.stepId;
         subscription.eventName = model.eventName;
@@ -264,6 +270,7 @@ export class SqlitePersistence implements IPersistenceProvider {
     private toEvent(model: EventModel): CoreEvent {
         const event = new CoreEvent();
         event.id = model.id;
+        event.tenantId = model.tenantId;
         event.eventName = model.eventName;
         event.eventKey = model.eventKey;
         event.eventData = model.eventData;
