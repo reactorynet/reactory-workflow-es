@@ -38,9 +38,12 @@ export class WorkflowExecutor implements IWorkflowExecutor {
 
         let exePointers: Array<ExecutionPointer> = instance.executionPointers.filter(x => x.active);
 
-        let def = this.registry.getDefinition(instance.workflowDefinitionId, instance.version);
+        // M1 — use the non-throwing variant; a missing (id, version) pair is dead-lettered
+        // cleanly instead of propagating an exception and looping forever.
+        let def = this.registry.tryGetDefinition(instance.workflowDefinitionId, instance.version);
         if (!def) {
-            throw new Error(`No workflow definition in registry for ${instance.workflowDefinitionId}:${instance.version}`);
+            this.deadLetterMissingDefinition(instance, result);
+            return result;
         }
 
         for (let pointer of exePointers) {
@@ -173,6 +176,77 @@ export class WorkflowExecutor implements IWorkflowExecutor {
         this.processAfterExecutionIteration(instance, def, result);
         this.determineNextExecutionTime(instance);
         return result;
+    }
+
+    /**
+     * M1 — Dead-letter an instance whose (workflowDefinitionId, version) is not registered.
+     *
+     * Called when `tryGetDefinition` returns `undefined` at load time. This is NOT a
+     * retryable condition (re-registering a definition is an operator action; retrying
+     * would reproduce the original infinite-loop symptom). Dead-letters on the first
+     * load that observes the miss, with `maxRetries: 0`.
+     *
+     * Reuses H5's `WorkflowStatus.DeadLettered`, `PointerStatus.DeadLettered`, and
+     * the single `workflow.dead-lettered` lifecycle event. Does NOT redefine any of
+     * those primitives.
+     */
+    private deadLetterMissingDefinition(instance: WorkflowInstance, result: WorkflowExecutorResult): void {
+        const message =
+            `Workflow definition not registered on load: ` +
+            `definitionId="${instance.workflowDefinitionId}", version=${instance.version}. ` +
+            `The host process has no registered definition for this (id, version) pair, so the instance ` +
+            `cannot be executed. This usually means an old workflow version was not re-registered after a ` +
+            `deploy. To fix: register all historical workflow versions on every host (never unregister old versions).`;
+
+        this.logger.log(LogLevel.Error, "Dead-lettering workflow — definition not registered on load", {
+            workflowId: instance.id,
+            workflowDefinitionId: instance.workflowDefinitionId,
+            version: instance.version,
+            tenantId: instance.tenantId,
+        });
+
+        // Record the structured error on result.errors.
+        const perr = new ExecutionError();
+        perr.message = message;
+        perr.errorTime = new Date();
+        result.errors.push(perr);
+
+        // Mark the genesis / first active pointer as the offending pointer.
+        const pointer = instance.executionPointers.find(p => p.active) || instance.executionPointers[0];
+        let stepId = -1;
+        if (pointer) {
+            pointer.active = false;
+            pointer.status = PointerStatus.DeadLettered;
+            if (!pointer.endTime) pointer.endTime = new Date();
+            if (!pointer.persistenceData) pointer.persistenceData = {};
+            if (!Array.isArray(pointer.persistenceData._errors)) pointer.persistenceData._errors = [];
+            pointer.persistenceData._errors.push({
+                message,
+                stack: null,
+                errorTime: new Date().toISOString(),
+                retryCount: pointer.retryCount || 0,
+            });
+            stepId = pointer.stepId;
+        }
+
+        // Transition instance to terminal dead-letter state.
+        instance.status = WorkflowStatus.DeadLettered;
+        instance.nextExecution = null;
+
+        // Emit exactly one lifecycle event reusing H5's payload shape.
+        const evt: WorkflowDeadLetteredEvent = {
+            event: WORKFLOW_DEAD_LETTERED as "workflow.dead-lettered",
+            workflowId: instance.id,
+            workflowDefinitionId: instance.workflowDefinitionId,
+            version: instance.version,
+            pointerId: pointer ? pointer.id : "",
+            stepId,
+            retryCount: pointer ? (pointer.retryCount || 0) : 0,
+            maxRetries: 0, // missing-definition is not retryable (M1 spec §6.5)
+            errorMessage: message,
+            deadLetteredAt: new Date().toISOString(),
+        };
+        this.lifecycle.emit(evt);
     }
 
     /**
