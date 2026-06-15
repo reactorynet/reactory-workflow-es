@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es-mongodb",
-  "version": "1.0.0-reactory.0",
+  "version": "1.0.0-reactory.3",
   "description": "MongoDB persistence provider for Workflow ES (Reactory fork — driver v6)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",

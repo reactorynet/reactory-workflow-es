@@ -4,7 +4,8 @@ import {
     EventSubscription,
     Event,
     WorkflowStatus,
-    WorkflowConcurrencyError
+    WorkflowConcurrencyError,
+    DEFAULT_TENANT
 } from "@reactorynet/workflow-es";
 import { MongoClient, ObjectId, Collection, Db } from "mongodb";
 
@@ -83,8 +84,22 @@ export class MongoDBPersistence implements IPersistenceProvider {
      */
     public async createNewWorkflow(instance: WorkflowInstance): Promise<string> {
         instance.concurrencyToken = 0;
-        const result = await this.workflowCollection.insertOne(instance as any);
-        instance.id = result.insertedId.toString();
+        // Persist the domain `id` (= stringified _id) alongside _id, so consumers that
+        // read/query by the string `id` field behave the same as the SQL providers
+        // (which store id as a column). Without this, a Mongo doc has only `_id` and any
+        // reader expecting a non-null string `id` (e.g. the Reactory execution-history
+        // view) drops the row. persistWorkflow leaves this field intact (it deletes `id`
+        // from its $set), so the value is stable for the life of the instance.
+        const _id = new ObjectId();
+        instance.id = _id.toString();
+        // M6: MongoDB has no column defaults, so stamp the tenant sentinel here to
+        // match the SQL providers (tenantId NOT NULL DEFAULT 'default'); otherwise a
+        // doc with no tenantId is invisible to the tenant-scoped queries.
+        await this.workflowCollection.insertOne({
+            ...(instance as any),
+            _id,
+            tenantId: instance.tenantId ?? DEFAULT_TENANT,
+        });
         return instance.id;
     }
 
@@ -154,7 +169,11 @@ export class MongoDBPersistence implements IPersistenceProvider {
     // ── Event subscriptions ───────────────────────────────────────────────────
 
     public async createEventSubscription(subscription: EventSubscription): Promise<void> {
-        const result = await this.subscriptionCollection.insertOne(subscription as any);
+        // M6: default the tenant sentinel on write (see createNewWorkflow).
+        const result = await this.subscriptionCollection.insertOne({
+            ...(subscription as any),
+            tenantId: subscription.tenantId ?? DEFAULT_TENANT,
+        });
         subscription.id = result.insertedId.toString();
     }
 
@@ -165,7 +184,7 @@ export class MongoDBPersistence implements IPersistenceProvider {
         asOf: Date
     ): Promise<Array<EventSubscription>> {
         const data = await this.subscriptionCollection
-            .find({ tenantId, eventName, eventKey, subscribeAsOf: { $lt: asOf } })
+            .find({ tenantId, eventName, eventKey, subscribeAsOf: { $lte: asOf } })
             .toArray();
         return data.map((item) => {
             (item as any).id = item._id.toString();
@@ -183,7 +202,11 @@ export class MongoDBPersistence implements IPersistenceProvider {
     // ── Events ────────────────────────────────────────────────────────────────
 
     public async createEvent(event: Event): Promise<string> {
-        const result = await this.eventCollection.insertOne(event as any);
+        // M6: default the tenant sentinel on write (see createNewWorkflow).
+        const result = await this.eventCollection.insertOne({
+            ...(event as any),
+            tenantId: event.tenantId ?? DEFAULT_TENANT,
+        });
         event.id = result.insertedId.toString();
         return event.id;
     }
@@ -238,7 +261,7 @@ export class MongoDBPersistence implements IPersistenceProvider {
 
     public async getEvents(tenantId: string, eventName: string, eventKey: any, asOf: Date): Promise<Array<string>> {
         const data = await this.eventCollection
-            .find({ tenantId, eventName, eventKey, eventTime: { $gt: asOf } })
+            .find({ tenantId, eventName, eventKey, eventTime: { $gte: asOf } })
             .project({ _id: 1 })
             .toArray();
         return data.map((item) => item._id.toString());
