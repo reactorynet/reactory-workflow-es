@@ -87,9 +87,13 @@ resilience for both; Phases 2–3 are operability, security, and hardening.
 | 15 | M2 | Mandated provider indexes; remove full-scan hotspots | Cloud | Medium | `[copilot+review]` | done | `specs/m2-provider-indexes.md` |
 | 16 | M1 | Workflow-definition version-safety on load | Both | Medium | `[copilot+review]` | done | `specs/m1-version-safety.md` |
 | 17 | M3 | Document & guard execution model (worker thread for Electron) | Electron | Medium | `[claude]` | done | `specs/m3-execution-model.md` |
+| **Phase 4 — Store-agnostic read layer (post-audit)** |
+| 18 | M9 | Persistence query/aggregation/delete contract + store-agnostic read layer | Both | High | `[claude]` / `[copilot+review]` | spec | `specs/m9-persistence-query-contract.md` |
 
 > IDs `C*/H*/M*` map 1:1 to the enterprise audit (Critical / High / Medium). They are stable: never
-> renumber. New items append with the next free number in their severity class.
+> renumber. New items append with the next free number in their severity class. **M9** is a
+> post-audit addition: items 1–17 are the original audit; M9 arose from integrating the engine into
+> `reactory-express-server`, whose history/stats read layer was hard-wired to MongoDB.
 
 ---
 
@@ -288,6 +292,27 @@ Acceptance (high level) · Depends on**. The spec expands every line into testab
 - **Acceptance.** Electron sample runs the host off the main thread; documented guidance with a working
   example.
 - **Depends on.** C2, H4.
+
+### Phase 4 — Store-agnostic read layer (post-audit)
+
+#### M9 — Persistence query/aggregation/delete contract `[claude]` / `[copilot+review]`
+- **Problem.** The engine persists through the pluggable `IPersistenceProvider`, but the consuming
+  `reactory-express-server` read layer (execution-history view, stats, inspector, AI macros) reads
+  through a hard-wired mongoose model — so history/stats only work under MongoDB persistence; with
+  `sqlite`/`postgres` the UI shows nothing. `IPersistenceProvider` has no filtered query, aggregation,
+  or delete surface.
+- **Goal.** Add a store-agnostic query + native aggregation (by-status, avg completion time,
+  per-definition rollups, failed-step rollups, daily time-series) + delete surface to
+  `IPersistenceProvider`, implemented natively in memory/sqlite/postgres/mongo (per-store
+  optimization), conformance-verified; refactor express to read/delete only through the active
+  provider and retire the mongoose model. Redis/cluster mode is orthogonal (coordination only).
+- **Affected surface.** `core/src/abstractions/persistence-provider.ts` + new query types; all
+  persistence providers; the M8 conformance suite; express `ReactoryWorkflowService` /
+  `WorkflowLifecycleManager` / `WorkflowRunner` (Phase 2).
+- **Acceptance.** With persistence set to sqlite, postgres, and mongo in turn, the express history,
+  stats, inspector, search, recent, and delete all work; mongoose `WorkflowInstanceModel` removed.
+- **Depends on.** C1, M6, M8, C2, C3 (all done). Phase 1 (contract, `[claude]`) precedes Phase 2
+  (express refactor, `[copilot+review]`).
 
 ---
 
