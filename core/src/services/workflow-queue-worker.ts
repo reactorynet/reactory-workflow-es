@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event, WorkflowExecutorResult } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowConcurrencyError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, LogLevel, TYPES, QueueType, IBackgroundWorker, toError, WorkflowConcurrencyError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
@@ -67,7 +67,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
         }
         this.shuttingDown = true;
         this.started = false;
-        this.logger.log("Stopping workflow queue worker...");
+        this.logger.log(LogLevel.Info, "Stopping workflow queue worker...");
         if (this.processTimer) {
             clearTimeout(this.processTimer);
             this.processTimer = null;
@@ -107,11 +107,11 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                 const workflowId = await self.queueProvider.dequeueForProcessing(QueueType.Workflow);
                 if (!workflowId)
                     break;
-                self.logger.log("Dequeued workflow " + workflowId + " for processing");
+                self.logger.log(LogLevel.Info, "Dequeued workflow for processing", { workflowId });
                 const id = workflowId;
                 const p: Promise<void> = self.processWorkflow(self, id)
                     .catch((err) => {
-                        self.logger.error("Error processing workflow", id, err);
+                        self.logger.log(LogLevel.Error, "Error processing workflow", { workflowId: id, err: toError(err) });
                     })
                     .finally(() => {
                         self.inFlight.delete(p);
@@ -121,7 +121,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error processing workflow queue: " + error.message);
+            self.logger.log(LogLevel.Error, "Error processing workflow queue", { err: error });
         }
         finally {
             // H1 (rules §6.3/§6.8): re-arm after the dequeue-and-dispatch phase
@@ -141,7 +141,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error recording workflow queue gauges (ignored): " + error.message);
+            self.logger.log(LogLevel.Error, "Error recording workflow queue gauges (ignored)", { err: error });
         }
     }
 
@@ -190,7 +190,7 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                                     // still inside the lock — for a fresh load-execute-persist
                                     // cycle (specs C1 §6.7, H2 §6.2).
                                     complete = false;
-                                    self.logger.info("Concurrency conflict persisting workflow %s; re-queueing", workflowId);
+                                    self.logger.log(LogLevel.Info, "Concurrency conflict persisting workflow; re-queueing", { workflowId });
                                     await self.queueProvider.queueForProcessing(workflowId, QueueType.Workflow);
                                 }
                                 else {
@@ -218,12 +218,12 @@ export class WorkflowQueueWorker implements IBackgroundWorker {
                 }
             }
             else {
-                self.logger.log("Workflow locked: " + workflowId);
+                self.logger.log(LogLevel.Info, "Workflow locked", { workflowId });
             }
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error processing workflow: " + error.message);
+            self.logger.log(LogLevel.Error, "Error processing workflow", { workflowId, err: error });
         }
     }
 

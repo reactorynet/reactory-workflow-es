@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, POLL_LEASE_KEY } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, LogLevel, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, POLL_LEASE_KEY } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
@@ -51,7 +51,7 @@ export class PollWorker implements IBackgroundWorker {
             return;
         }
         this.shuttingDown = true;
-        this.logger.log("Stopping poll worker...");
+        this.logger.log(LogLevel.Info, "Stopping poll worker...");
         if (this.processTimer) {
             clearInterval(this.processTimer);
             this.processTimer = null;
@@ -84,7 +84,7 @@ export class PollWorker implements IBackgroundWorker {
         const p: Promise<void> = self.process(self)
             .catch((err) => {
                 const error = toError(err);
-                self.logger.error("Error running poll: " + error.message);
+                self.logger.log(LogLevel.Error, "Error running poll", { err: error });
             })
             .finally(() => {
                 self.inFlight.delete(p);
@@ -104,7 +104,7 @@ export class PollWorker implements IBackgroundWorker {
     }
 
     private async processInner(self: PollWorker): Promise<void> {
-        self.logger.info("pollRunnables " + " - now = " + Date.now());
+        self.logger.log(LogLevel.Info, "pollRunnables", { now: Date.now() });
 
         // Elect a single active poller for this cycle via the distributed lease.
         let gotLease = false;
@@ -113,12 +113,12 @@ export class PollWorker implements IBackgroundWorker {
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error acquiring poll lease: " + error.message);
+            self.logger.log(LogLevel.Error, "Error acquiring poll lease", { err: error });
             return; // could not determine lease ownership; skip this cycle, retry next tick
         }
 
         if (!gotLease) {
-            self.logger.log("Poll lease held by another node; skipping cycle");
+            self.logger.log(LogLevel.Info, "Poll lease held by another node; skipping cycle");
             return;
         }
 
@@ -131,7 +131,7 @@ export class PollWorker implements IBackgroundWorker {
             }
             catch (err) {
                 const error = toError(err);
-                self.logger.error("Error running poll: " + error.message);
+                self.logger.log(LogLevel.Error, "Error polling runnable instances", { err: error });
             }
 
             try {
@@ -142,7 +142,7 @@ export class PollWorker implements IBackgroundWorker {
             }
             catch (err) {
                 const error = toError(err);
-                self.logger.error("Error running poll: " + error.message);
+                self.logger.log(LogLevel.Error, "Error polling runnable events", { err: error });
             }
         }
         finally {
@@ -153,7 +153,7 @@ export class PollWorker implements IBackgroundWorker {
             }
             catch (err) {
                 const error = toError(err);
-                self.logger.error("Error releasing poll lease: " + error.message);
+                self.logger.log(LogLevel.Error, "Error releasing poll lease", { err: error });
             }
         }
     }

@@ -1,5 +1,5 @@
 import { injectable, inject, Container } from "inversify";
-import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, toError, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED, IMetrics, ITracer, ISpan, METRIC_NAMES, SPAN_NAMES, ATTR, MetricAttributes } from "../abstractions";
+import { IPersistenceProvider, ILogger, LogLevel, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, toError, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED, IMetrics, ITracer, ISpan, METRIC_NAMES, SPAN_NAMES, ATTR, MetricAttributes } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, WorkflowDefinition, ExecutionPointer, PointerStatus, ExecutionResult, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult } from "../models";
 
@@ -34,7 +34,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
 
         let result: WorkflowExecutorResult = new WorkflowExecutorResult();
         
-        this.logger.log("Execute workflow: " + instance.id);                
+        this.logger.log(LogLevel.Info, "Execute workflow", { workflowId: instance.id, tenantId: instance.tenantId });
 
         let exePointers: Array<ExecutionPointer> = instance.executionPointers.filter(x => x.active);
 
@@ -128,7 +128,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
                 }
                 catch (err) {
                     const error = toError(err);
-                    this.logger.error("Error executing workflow %s on step %s - %o", instance.id, pointer.stepId, error);
+                    this.logger.log(LogLevel.Error, "Error executing workflow step", { workflowId: instance.id, stepId: String(pointer.stepId), err: error, tenantId: instance.tenantId });
                     // M5 §6.3: one error counter increment per caught step error.
                     this.safeMetric(() => this.metrics.incrementCounter(METRIC_NAMES.STEP_ERRORS, 1, {
                         [ATTR.WORKFLOW_DEFINITION_ID]: instance.workflowDefinitionId,
@@ -156,7 +156,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
                 }
             }
             else {
-                this.logger.error("Could not find step on workflow %s %s", instance.id, pointer.stepId);
+                this.logger.log(LogLevel.Error, "Could not find step on workflow", { workflowId: instance.id, stepId: String(pointer.stepId), tenantId: instance.tenantId });
                 // H5 (spec h5 §6.9): bounded, configurable. There is no step object to read
                 // maxRetries from, so the global default budget applies; on exhaustion the
                 // workflow dead-letters exactly as the Retry path does (spec h5 §6.5).
@@ -205,7 +205,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             deadLetteredAt: new Date().toISOString()
         };
 
-        this.logger.error("Workflow %s dead-lettered on step %s after %s retries (maxRetries %s)", workflow.id, pointer.stepId, pointer.retryCount, maxRetries);
+        this.logger.log(LogLevel.Error, "Workflow dead-lettered", { workflowId: workflow.id, stepId: String(pointer.stepId), retryCount: pointer.retryCount, maxRetries, tenantId: workflow.tenantId });
         this.lifecycle.emit(evt);
     }
 
@@ -264,12 +264,12 @@ export class WorkflowExecutor implements IWorkflowExecutor {
      */
     private safeMetric(fn: () => void): void {
         try { fn(); }
-        catch (err) { this.logger.error("Metrics call failed (ignored): " + toError(err).message); }
+        catch (err) { this.logger.log(LogLevel.Error, "Metrics call failed (ignored)", { err: toError(err) }); }
     }
 
     private safeSpan(fn: () => void): void {
         try { fn(); }
-        catch (err) { this.logger.error("Tracer call failed (ignored): " + toError(err).message); }
+        catch (err) { this.logger.log(LogLevel.Error, "Tracer call failed (ignored)", { err: toError(err) }); }
     }
 
     private startSpanSafe(name: string, attributes: MetricAttributes): ISpan {
@@ -277,7 +277,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             return this.tracer.startSpan(name, attributes);
         }
         catch (err) {
-            this.logger.error("Tracer.startSpan failed (ignored): " + toError(err).message);
+            this.logger.log(LogLevel.Error, "Tracer.startSpan failed (ignored)", { err: toError(err) });
             return { setAttribute() {}, recordError() {}, end() {} };
         }
     }

@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { Container, ContainerModule, interfaces, injectable, inject } from "inversify";
-import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, ITracer, IDataCodec } from "./abstractions";
+import { TYPES, IWorkflowRegistry, IQueueProvider, IWorkflowHost, IPersistenceProvider, IDistributedLockProvider, IWorkflowExecutor, IBackgroundWorker, IExecutionResultProcessor, IExecutionPointerFactory, ILogger, LogLevel, WorkflowOptions, DEFAULT_POLL_INTERVAL_MS, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, ITracer, IDataCodec } from "./abstractions";
 import { SingleNodeQueueProvider, SingleNodeLockProvider, MemoryPersistenceProvider, WorkflowExecutor, WorkflowQueueWorker, EventQueueWorker, PollWorker, WorkflowRegistry, WorkflowHost, ExecutionResultProcessor, ExecutionPointerFactory, NullLogger, ConsoleLogger, LifecycleEventHub, NoOpMetrics, NoOpTracer, NullDataCodec, DataCodecRunner } from "./services";
 
 /**
@@ -81,6 +81,15 @@ export class WorkflowConfig {
 
     public useLogger(service: ILogger) {
         this.container.rebind<ILogger>(TYPES.ILogger).toConstantValue(service);
+    }
+
+    /**
+     * M4 — convenience: bind a ConsoleLogger at the given minimum level.
+     * Equivalent to useLogger(new ConsoleLogger(level)).
+     * Default level is Info (same as new ConsoleLogger() with no argument).
+     */
+    public useConsoleLogger(level: LogLevel = LogLevel.Info) {
+        this.container.rebind<ILogger>(TYPES.ILogger).toConstantValue(new ConsoleLogger(level));
     }
 
     /**

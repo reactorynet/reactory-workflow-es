@@ -1,6 +1,6 @@
 import { inject, injectable } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
+import { WorkflowBase, IPersistenceProvider, IWorkflowHost, IQueueProvider, IDistributedLockProvider, IWorkflowExecutor, ILogger, LogLevel, TYPES, QueueType, IBackgroundWorker, toError, WorkflowOptions, IMetrics, METRIC_NAMES, ATTR, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
 import { WorkflowRegistry } from "./workflow-registry";
 import { WorkflowExecutor } from "./workflow-executor";
 import { drainWithTimeout } from "./drain";
@@ -67,7 +67,7 @@ export class EventQueueWorker implements IBackgroundWorker {
         }
         this.shuttingDown = true;
         this.started = false;
-        this.logger.log("Stopping event queue worker...");
+        this.logger.log(LogLevel.Info, "Stopping event queue worker...");
         if (this.processTimer) {
             clearTimeout(this.processTimer);
             this.processTimer = null;
@@ -106,11 +106,11 @@ export class EventQueueWorker implements IBackgroundWorker {
                 const eventId = await self.queueProvider.dequeueForProcessing(QueueType.Event);
                 if (!eventId)
                     break;
-                self.logger.log("Dequeued event " + eventId + " for processing");
+                self.logger.log(LogLevel.Info, "Dequeued event for processing", { eventId });
                 const id = eventId;
                 const p: Promise<void> = self.processEvent(self, id)
                     .catch((err) => {
-                        self.logger.error("Error processing event", id, err);
+                        self.logger.log(LogLevel.Error, "Error processing event", { eventId: id, err: toError(err) });
                     })
                     .finally(() => {
                         self.inFlight.delete(p);
@@ -120,7 +120,7 @@ export class EventQueueWorker implements IBackgroundWorker {
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error processing event queue: " + error.message);
+            self.logger.log(LogLevel.Error, "Error processing event queue", { err: error });
         }
         finally {
             // H1 (rules §6.3/§6.8): re-arm after the dequeue-and-dispatch phase
@@ -139,7 +139,7 @@ export class EventQueueWorker implements IBackgroundWorker {
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error recording event queue depth (ignored): " + error.message);
+            self.logger.log(LogLevel.Error, "Error recording event queue depth (ignored)", { err: error });
         }
     }
 
@@ -150,7 +150,7 @@ export class EventQueueWorker implements IBackgroundWorker {
             // share a lock key for the same underlying id.
             let stored = await self.persistence.getEvent(eventId);
             if (!stored) {
-                self.logger.log("Event not found: " + eventId);
+                self.logger.log(LogLevel.Info, "Event not found", { eventId });
                 return;
             }
             const tenantId = stored.tenantId || DEFAULT_TENANT;
@@ -185,12 +185,12 @@ export class EventQueueWorker implements IBackgroundWorker {
                 }
             }
             else {
-                self.logger.log("Event locked: " + eventId);
+                self.logger.log(LogLevel.Info, "Event locked", { eventId });
             }
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error processing event: " + error.message);
+            self.logger.log(LogLevel.Error, "Error processing event", { eventId, err: error });
         }
     }
 
@@ -223,7 +223,7 @@ export class EventQueueWorker implements IBackgroundWorker {
             }
             catch (err) {
                 const error = toError(err);
-                self.logger.error(error);
+                self.logger.log(LogLevel.Error, "Error seeding subscription", { workflowId: sub.workflowId, err: error });
                 return false;
             }
             finally {
@@ -231,7 +231,7 @@ export class EventQueueWorker implements IBackgroundWorker {
             }
         }
         else {
-            self.logger.info("Workflow locked " + sub.workflowId);
+            self.logger.log(LogLevel.Info, "Workflow locked (event seed deferred)", { workflowId: sub.workflowId });
             return false;
         }
     }

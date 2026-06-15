@@ -1,17 +1,16 @@
-import { injectable, inject } from "inversify";
-import { ILogger } from "../abstractions";
+import { injectable } from "inversify";
+import { ILogger, LogLevel, LogContext } from "../abstractions";
 
 @injectable()
 export class NullLogger implements ILogger {
-    public error(message?: any, ...optionalParams: any[]): void {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    public log(_level: LogLevel, _message: string, _context?: LogContext): void {
+        // intentional no-op — NullLogger is the default binding; the engine is silent out of the box.
+    }
 
-    }
-    
-    public info(message?: any, ...optionalParams: any[]): void {
+    /** @deprecated Shim — no-op. */
+    public info(_message?: any, ..._optionalParams: any[]): void {}
 
-    }
-    
-    public log(message?: any, ...optionalParams: any[]): void {
-        
-    }
+    /** @deprecated Shim — no-op. */
+    public error(_message?: any, ..._optionalParams: any[]): void {}
 }

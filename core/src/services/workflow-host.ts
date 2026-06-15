@@ -1,6 +1,6 @@
 import { injectable, inject, multiInject } from "inversify";
 import { WorkflowInstance, WorkflowStatus, ExecutionPointer, EventSubscription, Event } from "../models";
-import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, METRIC_NAMES, ATTR, HealthStatus, HealthReport, ComponentHealth, isHealthProbe, IHealthProbe, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
+import { WorkflowBase, IWorkflowRegistry, IPersistenceProvider, IWorkflowHost, IQueueProvider, QueueType, IDistributedLockProvider, IBackgroundWorker, TYPES, ILogger, LogLevel, IExecutionPointerFactory, toError, WorkflowConcurrencyError, WorkflowOptions, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS, ILifecycleEventHub, LifecycleEvent, IMetrics, METRIC_NAMES, ATTR, HealthStatus, HealthReport, ComponentHealth, isHealthProbe, IHealthProbe, DEFAULT_TENANT, tenantLockKey } from "../abstractions";
 import { WorkflowQueueWorker } from "./workflow-queue-worker";
 import { PollWorker } from "./poll-worker";
 
@@ -80,7 +80,7 @@ export class WorkflowHost implements IWorkflowHost {
     public async start(): Promise<void> {
         this.guardSingleNodeProviders();
 
-        this.logger.log("Starting workflow host...");
+        this.logger.log(LogLevel.Info, "Starting workflow host...");
         this.stopPromise = null;
 
         // Mark single-node providers as started so a second host start in the same
@@ -128,11 +128,11 @@ export class WorkflowHost implements IWorkflowHost {
     }
 
     private async performStop(): Promise<void> {
-        this.logger.log("Stopping workflow host...");
+        this.logger.log(LogLevel.Info, "Stopping workflow host...");
         this.removeCleanCallbacks();
         const timeoutMs = this.resolveGracefulShutdownTimeout();
         await Promise.all(this.workers.map((worker) => worker.stop(timeoutMs)));
-        this.logger.log("Workflow host stopped");
+        this.logger.log(LogLevel.Info, "Workflow host stopped");
     }
 
     /**
@@ -143,7 +143,7 @@ export class WorkflowHost implements IWorkflowHost {
     private resolveGracefulShutdownTimeout(): number {
         const configured = this.options ? this.options.gracefulShutdownTimeoutMs : DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS;
         if (typeof configured !== "number" || !Number.isFinite(configured) || configured < 0) {
-            this.logger.log("Invalid gracefulShutdownTimeoutMs (" + String(configured) + "); using default " + DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+            this.logger.log(LogLevel.Warn, "Invalid gracefulShutdownTimeoutMs; using default", { configured: String(configured), defaultMs: DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS });
             return DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT_MS;
         }
         return configured;
@@ -178,7 +178,7 @@ export class WorkflowHost implements IWorkflowHost {
             self.metrics.incrementCounter(METRIC_NAMES.WORKFLOW_STARTED, 1, { [ATTR.WORKFLOW_DEFINITION_ID]: def.id });
         }
         catch (err) {
-            self.logger.error("Metrics call failed (ignored): " + toError(err).message);
+            self.logger.log(LogLevel.Error, "Metrics call failed (ignored)", { err: toError(err) });
         }
         self.queueProvider.queueForProcessing(workflowId, QueueType.Workflow);
 
@@ -193,7 +193,7 @@ export class WorkflowHost implements IWorkflowHost {
     public async publishEvent(eventName: string, eventKey: string, eventData: any, eventTime: Date, tenantId: string = DEFAULT_TENANT): Promise<void> {
         //todo: check host status
 
-        this.logger.info("Publishing event %s %s", eventName, eventKey);
+        this.logger.log(LogLevel.Info, "Publishing event", { eventName, eventKey });
 
         let evt = new Event();
         // M6: coerce a falsy tenant to the sentinel so the event is always scoped.
@@ -212,7 +212,7 @@ export class WorkflowHost implements IWorkflowHost {
             this.metrics.incrementCounter(METRIC_NAMES.EVENT_PUBLISHED, 1, { "event.name": eventName });
         }
         catch (err) {
-            this.logger.error("Metrics call failed (ignored): " + toError(err).message);
+            this.logger.log(LogLevel.Error, "Metrics call failed (ignored)", { err: toError(err) });
         }
         this.queueProvider.queueForProcessing(id, QueueType.Event);
     }
@@ -296,7 +296,7 @@ export class WorkflowHost implements IWorkflowHost {
         }
         catch (err) {
             const error = toError(err);
-            self.logger.error("Error " + verb + " workflow: " + error.message);
+            self.logger.log(LogLevel.Error, "Error " + verb + " workflow", { workflowId: id, err: error });
             return false;
         }
     }
@@ -426,10 +426,10 @@ export class WorkflowHost implements IWorkflowHost {
             return; // already registered for this host
 
         self.sigtermHandler = () => {
-            self.stop().catch((err) => self.logger.error("Error during graceful shutdown (SIGTERM)", err));
+            self.stop().catch((err) => self.logger.log(LogLevel.Error, "Error during graceful shutdown (SIGTERM)", { err: toError(err) }));
         };
         self.sigintHandler = () => {
-            self.stop().catch((err) => self.logger.error("Error during graceful shutdown (SIGINT)", err));
+            self.stop().catch((err) => self.logger.log(LogLevel.Error, "Error during graceful shutdown (SIGINT)", { err: toError(err) }));
         };
         process.on('SIGTERM', self.sigtermHandler);
         process.on('SIGINT', self.sigintHandler);

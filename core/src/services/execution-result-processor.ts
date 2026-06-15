@@ -1,5 +1,5 @@
 import { injectable, inject } from "inversify";
-import { IPersistenceProvider, ILogger, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, IExecutionPointerFactory, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED, DEFAULT_TENANT } from "../abstractions";
+import { IPersistenceProvider, ILogger, LogLevel, IWorkflowRegistry, IWorkflowExecutor, TYPES, IExecutionResultProcessor, IExecutionPointerFactory, WorkflowOptions, ILifecycleEventHub, WorkflowDeadLetteredEvent, WORKFLOW_DEAD_LETTERED, DEFAULT_TENANT } from "../abstractions";
 import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, ExecutionPointer, PointerStatus, ExecutionResult, WorkflowDefinition, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult, EventSubscription } from "../models";
 const isNullOrUndefined = (val: any): val is null | undefined => val === null || val === undefined;
@@ -167,7 +167,7 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
             deadLetteredAt: new Date().toISOString()
         };
 
-        this.logger.error("Workflow %s dead-lettered on step %s after %s retries (maxRetries %s)", workflow.id, pointer.stepId, pointer.retryCount, maxRetries);
+        this.logger.log(LogLevel.Error, "Workflow dead-lettered", { workflowId: workflow.id, stepId: String(pointer.stepId), retryCount: pointer.retryCount, maxRetries, tenantId: workflow.tenantId });
         this.lifecycle.emit(evt);
     }
 
