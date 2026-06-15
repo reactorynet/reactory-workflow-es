@@ -1,0 +1,27 @@
+{
+    "compilerOptions": {
+        "module": "commonjs",
+        "target": "es2017",
+        "declaration": false,
+        "noImplicitAny": true,
+        "allowSyntheticDefaultImports": true,
+        "sourceMap": false,
+        "skipLibCheck": true,
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "lib": [
+            "es2017",
+            "dom"
+        ],
+        "outDir": "dist",
+        "rootDir": "."
+    },
+    "include": [
+        "src/**/*.ts",
+        "spec/**/*.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
+}

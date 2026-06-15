@@ -1,0 +1,37 @@
+{
+  "name": "@reactorynet/workflow-es-sample-electron",
+  "version": "1.0.0",
+  "description": "Electron sample: WorkflowHost in a utilityProcess with SqlitePersistence and graceful drain",
+  "private": true,
+  "main": "dist/src/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "electron dist/src/main.js",
+    "rebuild": "electron-rebuild -f -w sqlite3",
+    "pretest": "tsc",
+    "test": "jasmine --config=spec/support/jasmine.json"
+  },
+  "keywords": [
+    "workflow",
+    "electron",
+    "sqlite",
+    "sample"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@reactorynet/workflow-es": "file:../../core",
+    "inversify": "^6.0.0",
+    "reflect-metadata": "^0.2.0"
+  },
+  "devDependencies": {
+    "@types/jasmine": "^4.6.0",
+    "@types/node": "^20.0.0",
+    "electron": "^31.0.0",
+    "jasmine": "^5.0.0",
+    "jasmine-core": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "notes": {
+    "sqlite": "To run the full Electron app (not just the headless spec), also install @reactorynet/workflow-es-sqlite and run 'yarn rebuild' to rebuild the native sqlite3 addon for your Electron ABI. See samples/electron/README.md for full setup instructions."
+  }
+}

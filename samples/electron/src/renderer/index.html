@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <title>Workflow ES — Electron Sample</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #1e1e2e;
+            color: #cdd6f4;
+        }
+        h1 { color: #cba6f7; margin-bottom: 4px; }
+        .subtitle { color: #6c7086; margin-bottom: 24px; font-size: 0.9em; }
+
+        .clock-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 12px 16px;
+            background: #181825;
+            border-radius: 8px;
+        }
+        .clock-label { color: #6c7086; font-size: 0.85em; }
+        #clock {
+            font-size: 1.4em;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            color: #a6e3a1;
+        }
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #313244;
+            border-top-color: #cba6f7;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .buttons { display: flex; gap: 12px; margin-bottom: 24px; }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.85; }
+        #btn-hello     { background: #89b4fa; color: #1e1e2e; }
+        #btn-cpu-heavy { background: #fab387; color: #1e1e2e; }
+
+        .instructions {
+            font-size: 0.85em;
+            color: #6c7086;
+            margin-bottom: 20px;
+            padding: 10px 14px;
+            background: #181825;
+            border-radius: 6px;
+            border-left: 3px solid #cba6f7;
+        }
+        .instructions strong { color: #fab387; }
+
+        .log-header { color: #6c7086; font-size: 0.85em; margin-bottom: 6px; }
+        #log {
+            height: 260px;
+            overflow-y: auto;
+            background: #181825;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: "JetBrains Mono", "Fira Code", monospace;
+            font-size: 0.8em;
+            line-height: 1.6;
+            color: #cdd6f4;
+        }
+        .log-entry { color: #a6e3a1; }
+        .log-entry.error { color: #f38ba8; }
+    </style>
+</head>
+<body>
+    <h1>Workflow ES — Electron Sample</h1>
+    <p class="subtitle">
+        Engine runs in a <code>utilityProcess</code> · Persistence: SqlitePersistence (C2) ·
+        Graceful drain on quit (H4)
+    </p>
+
+    <!-- Always-animating clock — proves the renderer stays live during CPU-heavy steps -->
+    <div class="clock-bar">
+        <div class="spinner"></div>
+        <span class="clock-label">Renderer clock (must keep updating during CPU-heavy run):</span>
+        <span id="clock">--:--:--</span>
+    </div>
+
+    <div class="buttons">
+        <button id="btn-hello">Start hello workflow</button>
+        <button id="btn-cpu-heavy">Run CPU-heavy workflow (3 s burn)</button>
+    </div>
+
+    <div class="instructions">
+        Click <strong>Run CPU-heavy workflow</strong> and watch the clock above.
+        Because the engine runs in a <code>utilityProcess</code> (separate OS process),
+        the 3-second synchronous busy-loop in the step body does NOT freeze this renderer.
+        The clock keeps ticking. Quit the app while a workflow is running to observe the
+        graceful drain — the app waits for the engine to finish before exiting.
+    </div>
+
+    <div class="log-header">Engine log</div>
+    <div id="log"></div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

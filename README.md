@@ -68,10 +68,11 @@ yarn build:pack  # build + emit .tgz artifact for local integration
 - **OpenTelemetry instrumentation** — emit spans for step execution (integrate with `reactory-telemetry`)
 - **Provider upgrades** — bring MongoDB, Redis and Azure providers up to current driver versions
 
-## Guides (from upstream)
+## Guides
 
 - [JavaScript (ES6)](es2017-guide.md)
 - [TypeScript](typescript-guide.md)
+- [Desktop / Electron](docs/electron-integration.md) — execution-model contract, off-main-thread hosting with `utilityProcess`, graceful drain
 
 ## Persistence
 
