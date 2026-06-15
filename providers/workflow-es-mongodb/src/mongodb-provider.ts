@@ -31,6 +31,35 @@ export class MongoDBPersistence implements IPersistenceProvider {
             this.workflowCollection  = this.db.collection("workflows");
             this.subscriptionCollection = this.db.collection("subscriptions");
             this.eventCollection = this.db.collection("events");
+
+            // M2: create the four mandated access-pattern indexes idempotently.
+            // createIndex with the same key spec is a no-op on MongoDB — safe to call on
+            // every connect. tenantId leads each spec (equality-before-range, per M6).
+            // Canonical stable names so operational tooling can detect them uniformly.
+
+            // 1. getRunnableInstances: status===Runnable && nextExecution<now [&& tenantId==t]
+            await this.workflowCollection.createIndex(
+                { tenantId: 1, status: 1, nextExecution: 1 },
+                { name: "idx_workflows_status_next_execution" }
+            );
+
+            // 2. getRunnableEvents: !isProcessed && eventTime<=now [&& tenantId==t]
+            await this.eventCollection.createIndex(
+                { tenantId: 1, isProcessed: 1, eventTime: 1 },
+                { name: "idx_events_isprocessed_eventtime" }
+            );
+
+            // 3. getEvents: tenantId==t && eventName==n && eventKey==k && eventTime>=asOf
+            await this.eventCollection.createIndex(
+                { tenantId: 1, eventName: 1, eventKey: 1, eventTime: 1 },
+                { name: "idx_events_name_key_eventtime" }
+            );
+
+            // 4. getSubscriptions: tenantId==t && eventName==n && eventKey==k && subscribeAsOf<=asOf
+            await this.subscriptionCollection.createIndex(
+                { tenantId: 1, eventName: 1, eventKey: 1, subscribeAsOf: 1 },
+                { name: "idx_subscriptions_name_key_subscribeasof" }
+            );
         })();
     }
 

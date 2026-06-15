@@ -3,7 +3,14 @@ import { Table, Model, Column, Default, PrimaryKey, DataType, AllowNull, Index }
 @Table({
     timestamps: false,
     freezeTableName: true,
-    tableName: 'subscriptions'
+    tableName: 'subscriptions',
+    indexes: [
+        {
+            // M2: backs getSubscriptions() — tenantId==t && eventName==n && eventKey==k && subscribeAsOf<=asOf.
+            name: 'idx_subscriptions_name_key_subscribeasof',
+            fields: ['tenantId', 'eventName', 'eventKey', 'subscribeAsOf']
+        }
+    ]
 })
 export class Subscription extends Model {
 

@@ -4,7 +4,16 @@ import { ExecutionPointer } from './executionPointer';
 @Table({
     timestamps: false,
     freezeTableName: true,
-    tableName: 'workflows'
+    tableName: 'workflows',
+    indexes: [
+        {
+            // M2: backs getRunnableInstances() — status===Runnable && nextExecution<now [&& tenantId==t].
+            // tenantId leads (equality-before-range); when tenantId is omitted the planner uses
+            // the status sub-index. Stable canonical name used by operational tooling.
+            name: 'idx_workflows_status_next_execution',
+            fields: ['tenantId', 'status', 'nextExecution']
+        }
+    ]
 })
 export class Workflow extends Model {
 
