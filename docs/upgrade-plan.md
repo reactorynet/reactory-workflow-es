@@ -84,9 +84,9 @@ resilience for both; Phases 2–3 are operability, security, and hardening.
 | 13 | H6 | At-rest encryption/redaction hook for workflow data | Cloud | High | `[claude]` | done | `specs/h6-data-at-rest.md` |
 | 14 | M6 | Multi-tenancy / namespace scoping | Cloud | Medium | `[claude]` | done | `specs/m6-multi-tenancy.md` |
 | **Phase 3 — Hardening & scale polish** |
-| 15 | M2 | Mandated provider indexes; remove full-scan hotspots | Cloud | Medium | `[copilot+review]` | spec | `specs/m2-provider-indexes.md` |
-| 16 | M1 | Workflow-definition version-safety on load | Both | Medium | `[copilot+review]` | spec | `specs/m1-version-safety.md` |
-| 17 | M3 | Document & guard execution model (worker thread for Electron) | Electron | Medium | `[claude]` | spec | `specs/m3-execution-model.md` |
+| 15 | M2 | Mandated provider indexes; remove full-scan hotspots | Cloud | Medium | `[copilot+review]` | done | `specs/m2-provider-indexes.md` |
+| 16 | M1 | Workflow-definition version-safety on load | Both | Medium | `[copilot+review]` | done | `specs/m1-version-safety.md` |
+| 17 | M3 | Document & guard execution model (worker thread for Electron) | Electron | Medium | `[claude]` | done | `specs/m3-execution-model.md` |
 
 > IDs `C*/H*/M*` map 1:1 to the enterprise audit (Critical / High / Medium). They are stable: never
 > renumber. New items append with the next free number in their severity class.

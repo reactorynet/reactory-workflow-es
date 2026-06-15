@@ -254,3 +254,6 @@ ModelManifest.xml
 **/.yarn/install-state.gz
 # Yarn PnP loader files (we use the node-modules linker, not PnP)
 **/.pnp.*
+
+# Claude Code agent worktrees (ephemeral; auto-created for parallel agent runs)
+.claude/worktrees/
