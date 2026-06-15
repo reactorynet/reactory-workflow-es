@@ -67,11 +67,11 @@ import { IPersistenceProvider, WorkflowInstance, EventSubscription, Event, Workf
 // providers/workflow-es-redis/src/redis-queue-provider.ts:3
 import { IQueueProvider, QueueType, TYPES, ILogger } from "workflow-es";
 // providers/workflow-es-redis/src/redis-lock-manager.ts:2
-import { IDistributedLockProvider, TYPES, ILogger } from 'workflow-es';
+import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 // providers/workflow-es-azure/src/azure-lock-manager.ts:3
-import { IDistributedLockProvider, TYPES, ILogger } from 'workflow-es';
+import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 // providers/workflow-es-azure/src/azure-queue-provider.ts:3
-import { IQueueProvider, QueueType, TYPES, ILogger } from 'workflow-es';
+import { IQueueProvider, QueueType, TYPES, ILogger } from '@reactorynet/workflow-es';
 ```
 
 Postgres is already correct on imports
@@ -405,21 +405,21 @@ import { IQueueProvider, QueueType, TYPES, ILogger } from "@reactorynet/workflow
 
 ```ts
 // BEFORE — providers/workflow-es-redis/src/redis-lock-manager.ts:2
-import { IDistributedLockProvider, TYPES, ILogger } from 'workflow-es';
+import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 // AFTER
 import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 ```
 
 ```ts
 // BEFORE — providers/workflow-es-azure/src/azure-lock-manager.ts:3
-import { IDistributedLockProvider, TYPES, ILogger } from 'workflow-es';
+import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 // AFTER
 import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 ```
 
 ```ts
 // BEFORE — providers/workflow-es-azure/src/azure-queue-provider.ts:3
-import { IQueueProvider, QueueType, TYPES, ILogger } from 'workflow-es';
+import { IQueueProvider, QueueType, TYPES, ILogger } from '@reactorynet/workflow-es';
 // AFTER
 import { IQueueProvider, QueueType, TYPES, ILogger } from '@reactorynet/workflow-es';
 ```

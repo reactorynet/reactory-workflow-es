@@ -87,7 +87,7 @@ between us and this, and the lock is per-process.
 
 ```ts
 // providers/workflow-es-redis/src/redis-lock-manager.ts:2
-import { IDistributedLockProvider, TYPES, ILogger } from 'workflow-es';
+import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 ```
 
 The current package is `@reactorynet/workflow-es` (`core/package.json:2`). The lock interface method is
@@ -546,7 +546,7 @@ cd providers/workflow-es-redis && yarn install && yarn build && yarn test
 - [ ] `cd providers/workflow-es-mongodb && yarn build` and `cd providers/workflow-es-mysql && yarn build`
       and `cd providers/workflow-es-azure && yarn build` succeed against current core
       (`@reactorynet/workflow-es`).
-- [ ] `grep -R "from 'workflow-es'" providers/workflow-es-redis providers/workflow-es-azure` returns no
+- [ ] `grep -R "from '@reactorynet/workflow-es'" providers/workflow-es-redis providers/workflow-es-azure` returns no
       matches (old package name fully removed in the touched providers).
 - [ ] `WorkflowConcurrencyError` is importable as `import { WorkflowConcurrencyError } from "@reactorynet/workflow-es"`.
 
