@@ -6,10 +6,16 @@ import {
     EventSubscription,
     Event as CoreEvent,
     WorkflowStatus,
-    WorkflowConcurrencyError
+    WorkflowConcurrencyError,
+    WorkflowInstanceQuery,
+    WorkflowInstanceStats,
+    WorkflowDefinitionRollup,
+    WorkflowTimeSeriesQuery,
+    WorkflowTimeSeriesPoint,
+    PointerStatus
 } from "@reactorynet/workflow-es";
 import { Sequelize } from "sequelize-typescript";
-import { Op } from "sequelize";
+import { Op, fn, col, cast, literal, where as sqlWhere, WhereOptions } from "sequelize";
 import { Workflow } from "./models/workflow";
 import { ExecutionPointer } from "./models/executionPointer";
 import { Subscription } from "./models/subscription";
@@ -207,6 +213,207 @@ export class SqlitePersistence implements IPersistenceProvider {
             attributes: ["id"]
         });
         return events.map((event) => event.id.toString());
+    }
+
+    // ── M9 — query / stats / time-series / delete ─────────────────────────────
+    // Same shape as the Postgres provider via the sqlite dialect: findAndCountAll
+    // for the filtered query; GROUP BY aggregations via fn/col/literal; day bucket
+    // via strftime('%Y-%m-%d', createTime); average over julianday() diff (×86400000
+    // → ms). destroy for hard deletes (owned pointers removed in the same txn).
+    // Read/delete-only: never touches concurrencyToken or events/subscriptions.
+
+    public async queryWorkflowInstances(query: WorkflowInstanceQuery): Promise<{ instances: WorkflowInstance[]; total: number }> {
+        const where = this.buildWhere(query);
+        const sortField = query.sortField ?? "createTime";
+        const sortOrder = (query.sortOrder ?? "desc").toUpperCase() as "ASC" | "DESC";
+        const skip = Math.max(0, query.skip ?? 0);
+        const take = Math.min(query.take ?? 50, 500);
+
+        const { rows, count } = await Workflow.findAndCountAll({
+            where,
+            include: [ExecutionPointer],
+            order: [[sortField, sortOrder], ["id", "ASC"]],
+            offset: skip,
+            limit: take,
+            distinct: true
+        });
+
+        return {
+            instances: rows.map((model) => this.toWorkflowInstance(model)),
+            total: count
+        };
+    }
+
+    public async getWorkflowInstanceStats(query: WorkflowInstanceQuery & { topDefinitions?: number } = {}): Promise<WorkflowInstanceStats> {
+        const where = this.buildWhere(query);
+        const topDefinitions = query.topDefinitions ?? 20;
+
+        const statusRows: any[] = await Workflow.findAll({
+            where,
+            attributes: ["status", [fn("COUNT", col("id")), "cnt"]],
+            group: ["status"],
+            raw: true
+        });
+        const byStatus: Record<number, number> = {};
+        let total = 0;
+        for (const r of statusRows) {
+            const n = Number(r.cnt);
+            byStatus[Number(r.status)] = n;
+            total += n;
+        }
+
+        // averageCompletionTimeMs over Complete instances. SQLite julianday() yields
+        // fractional days; ×86400000 converts the difference to milliseconds.
+        const avgRow: any = await Workflow.findOne({
+            where: { ...where, status: WorkflowStatus.Complete, completeTime: { [Op.ne]: null } } as WhereOptions,
+            attributes: [[fn("AVG", literal('(julianday(completeTime) - julianday(createTime)) * 86400000')), "avgMs"]],
+            raw: true
+        });
+        const averageCompletionTimeMs = avgRow && avgRow.avgMs != null ? Number(avgRow.avgMs) : null;
+
+        const defRows: any[] = await Workflow.findAll({
+            where,
+            attributes: [
+                "workflowDefinitionId",
+                [fn("COUNT", col("id")), "total"],
+                [fn("SUM", literal(`CASE WHEN status = ${WorkflowStatus.Complete} THEN 1 ELSE 0 END`)), "complete"],
+                [fn("SUM", literal(`CASE WHEN status = ${WorkflowStatus.Terminated} THEN 1 ELSE 0 END`)), "terminated"]
+            ],
+            group: ["workflowDefinitionId"],
+            order: [[literal("total"), "DESC"], ["workflowDefinitionId", "ASC"]],
+            limit: topDefinitions,
+            raw: true
+        });
+        const byDefinition: WorkflowDefinitionRollup[] = defRows.map((r) => ({
+            workflowDefinitionId: r.workflowDefinitionId,
+            total: Number(r.total),
+            complete: Number(r.complete),
+            terminated: Number(r.terminated)
+        }));
+
+        const failedRows: any[] = await Workflow.findAll({
+            where: { ...where, status: { [Op.ne]: WorkflowStatus.Terminated } } as WhereOptions,
+            include: [{
+                model: ExecutionPointer,
+                attributes: [],
+                where: { status: PointerStatus.Failed },
+                required: true
+            }],
+            attributes: [
+                "workflowDefinitionId",
+                [fn("COUNT", fn("DISTINCT", col("Workflow.id"))), "cnt"]
+            ],
+            group: ["workflowDefinitionId"],
+            raw: true
+        });
+        const instancesWithFailedSteps: Record<string, number> = {};
+        for (const r of failedRows) {
+            instancesWithFailedSteps[r.workflowDefinitionId] = Number(r.cnt);
+        }
+
+        return { total, byStatus, averageCompletionTimeMs, byDefinition, instancesWithFailedSteps };
+    }
+
+    public async getWorkflowInstanceTimeSeries(query: WorkflowTimeSeriesQuery): Promise<WorkflowTimeSeriesPoint[]> {
+        const where: WhereOptions = {
+            createTime: { [Op.gte]: query.from, [Op.lte]: query.to },
+            ...(query.tenantId !== undefined ? { tenantId: query.tenantId } : {})
+        };
+        // Sequelize stores DATE as a UTC ISO-8601 string in SQLite, so strftime over
+        // the raw column yields the correct UTC day bucket.
+        const dayExpr = literal("strftime('%Y-%m-%d', createTime)");
+        const rows: any[] = await Workflow.findAll({
+            where,
+            attributes: [
+                [dayExpr, "day"],
+                [fn("COUNT", col("id")), "total"],
+                [fn("SUM", literal(`CASE WHEN status = ${WorkflowStatus.Complete} THEN 1 ELSE 0 END`)), "complete"],
+                [fn("SUM", literal(`CASE WHEN status = ${WorkflowStatus.Terminated} THEN 1 ELSE 0 END`)), "terminated"]
+            ],
+            group: [dayExpr as any],
+            order: [[literal("day"), "ASC"]],
+            raw: true
+        });
+        return rows.map((r) => ({
+            date: r.day,
+            total: Number(r.total),
+            complete: Number(r.complete),
+            terminated: Number(r.terminated)
+        }));
+    }
+
+    public async deleteWorkflowInstance(id: string): Promise<boolean> {
+        return this.sequelize.transaction(async (transaction) => {
+            await ExecutionPointer.destroy({ where: { workflowId: id }, transaction });
+            const removed = await Workflow.destroy({ where: { id }, transaction });
+            return removed > 0;
+        });
+    }
+
+    public async deleteWorkflowInstances(ids: string[]): Promise<number> {
+        if (!ids || ids.length === 0) return 0;
+        return this.sequelize.transaction(async (transaction) => {
+            await ExecutionPointer.destroy({ where: { workflowId: { [Op.in]: ids } }, transaction });
+            return Workflow.destroy({ where: { id: { [Op.in]: ids } }, transaction });
+        });
+    }
+
+    public async deleteWorkflowInstancesByDefinitionId(workflowDefinitionId: string, tenantId?: string): Promise<number> {
+        return this.sequelize.transaction(async (transaction) => {
+            const wfWhere: WhereOptions = {
+                workflowDefinitionId,
+                ...(tenantId !== undefined ? { tenantId } : {})
+            };
+            const matching = await Workflow.findAll({ where: wfWhere, attributes: ["id"], transaction });
+            const matchingIds = matching.map((m) => m.id);
+            if (matchingIds.length > 0) {
+                await ExecutionPointer.destroy({ where: { workflowId: { [Op.in]: matchingIds } }, transaction });
+            }
+            return Workflow.destroy({ where: wfWhere, transaction });
+        });
+    }
+
+    /** Translate a WorkflowInstanceQuery into a Sequelize where clause (AND of all provided filters). */
+    private buildWhere(query: WorkflowInstanceQuery): WhereOptions {
+        const where: any = {};
+
+        if (query.tenantId !== undefined) where.tenantId = query.tenantId;
+
+        if (query.workflowDefinitionId !== undefined) {
+            if (query.workflowDefinitionId.indexOf("*") >= 0) {
+                where.workflowDefinitionId = { [Op.like]: query.workflowDefinitionId.replace(/\*/g, "%") };
+            } else {
+                where.workflowDefinitionId = query.workflowDefinitionId;
+            }
+        }
+
+        if (query.status !== undefined) {
+            where.status = Array.isArray(query.status) ? { [Op.in]: query.status } : query.status;
+        }
+
+        const createTime: any = {};
+        if (query.createdAfter !== undefined) createTime[Op.gte] = query.createdAfter;
+        if (query.createdBefore !== undefined) createTime[Op.lte] = query.createdBefore;
+        if (Object.getOwnPropertySymbols(createTime).length > 0) where.createTime = createTime;
+
+        const completeTime: any = {};
+        if (query.completedAfter !== undefined) completeTime[Op.gte] = query.completedAfter;
+        if (query.completedBefore !== undefined) completeTime[Op.lte] = query.completedBefore;
+        if (Object.getOwnPropertySymbols(completeTime).length > 0) where.completeTime = completeTime;
+
+        if (query.searchTerm !== undefined && query.searchTerm !== "") {
+            const term = `%${query.searchTerm}%`;
+            // SQLite LIKE is case-insensitive for ASCII by default — matches the
+            // case-insensitive contract. id is a UUID; CAST to TEXT before matching.
+            // Qualify with the model alias so the reference is unambiguous when joined.
+            where[Op.or] = [
+                { workflowDefinitionId: { [Op.like]: term } },
+                { description: { [Op.like]: term } },
+                sqlWhere(cast(col("Workflow.id"), "TEXT"), { [Op.like]: term })
+            ];
+        }
+
+        return where as WhereOptions;
     }
 
     // ── Model → domain mappers ────────────────────────────────────────────────

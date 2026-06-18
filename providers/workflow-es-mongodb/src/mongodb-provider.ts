@@ -5,9 +5,15 @@ import {
     Event,
     WorkflowStatus,
     WorkflowConcurrencyError,
-    DEFAULT_TENANT
+    DEFAULT_TENANT,
+    WorkflowInstanceQuery,
+    WorkflowInstanceStats,
+    WorkflowDefinitionRollup,
+    WorkflowTimeSeriesQuery,
+    WorkflowTimeSeriesPoint,
+    PointerStatus
 } from "@reactorynet/workflow-es";
-import { MongoClient, ObjectId, Collection, Db } from "mongodb";
+import { MongoClient, ObjectId, Collection, Db, Filter } from "mongodb";
 
 export class MongoDBPersistence implements IPersistenceProvider {
 
@@ -265,6 +271,202 @@ export class MongoDBPersistence implements IPersistenceProvider {
             .project({ _id: 1 })
             .toArray();
         return data.map((item) => item._id.toString());
+    }
+
+    // ── M9 — query / stats / time-series / delete ─────────────────────────────
+    // find/countDocuments for the filtered query; aggregation pipelines for stats
+    // ($group/$cond/$avg of $subtract), failed-steps ($match on
+    // executionPointers.status), and the daily time-series ($dateToString on
+    // createTime); deleteMany/deleteOne for hard deletes. Honours the tenantId
+    // default. Read/delete-only: never touches concurrencyToken or events/subs.
+
+    public async queryWorkflowInstances(query: WorkflowInstanceQuery): Promise<{ instances: WorkflowInstance[]; total: number }> {
+        const filter = this.buildFilter(query);
+        const sortField = query.sortField ?? "createTime";
+        const sortOrder = (query.sortOrder ?? "desc") === "asc" ? 1 : -1;
+        const skip = Math.max(0, query.skip ?? 0);
+        const take = Math.min(query.take ?? 50, 500);
+
+        const total = await this.workflowCollection.countDocuments(filter);
+        const docs = await this.workflowCollection
+            .find(filter)
+            // id tie-break (_id is monotonic with insertion) for stable pagination.
+            .sort({ [sortField]: sortOrder, _id: 1 })
+            .skip(skip)
+            .limit(take)
+            .toArray();
+
+        const instances = docs.map((doc) => {
+            (doc as any).id = doc._id.toString();
+            return doc as any as WorkflowInstance;
+        });
+        return { instances, total };
+    }
+
+    public async getWorkflowInstanceStats(query: WorkflowInstanceQuery & { topDefinitions?: number } = {}): Promise<WorkflowInstanceStats> {
+        const filter = this.buildFilter(query);
+        const topDefinitions = query.topDefinitions ?? 20;
+
+        // byStatus + total.
+        const statusAgg = await this.workflowCollection.aggregate([
+            { $match: filter },
+            { $group: { _id: "$status", cnt: { $sum: 1 } } }
+        ]).toArray();
+        const byStatus: Record<number, number> = {};
+        let total = 0;
+        for (const r of statusAgg) {
+            const n = Number(r.cnt);
+            byStatus[Number(r._id)] = n;
+            total += n;
+        }
+
+        // averageCompletionTimeMs over Complete instances with a completeTime.
+        const avgAgg = await this.workflowCollection.aggregate([
+            { $match: { ...filter, status: WorkflowStatus.Complete, completeTime: { $ne: null } } },
+            { $group: { _id: null, avgMs: { $avg: { $subtract: ["$completeTime", "$createTime"] } } } }
+        ]).toArray();
+        const averageCompletionTimeMs = avgAgg.length > 0 && avgAgg[0].avgMs != null ? Number(avgAgg[0].avgMs) : null;
+
+        // byDefinition rollup sorted by total desc, capped to topDefinitions.
+        const defAgg = await this.workflowCollection.aggregate([
+            { $match: filter },
+            {
+                $group: {
+                    _id: "$workflowDefinitionId",
+                    total: { $sum: 1 },
+                    complete: { $sum: { $cond: [{ $eq: ["$status", WorkflowStatus.Complete] }, 1, 0] } },
+                    terminated: { $sum: { $cond: [{ $eq: ["$status", WorkflowStatus.Terminated] }, 1, 0] } }
+                }
+            },
+            { $sort: { total: -1, _id: 1 } },
+            { $limit: topDefinitions }
+        ]).toArray();
+        const byDefinition: WorkflowDefinitionRollup[] = defAgg.map((r) => ({
+            workflowDefinitionId: r._id,
+            total: Number(r.total),
+            complete: Number(r.complete),
+            terminated: Number(r.terminated)
+        }));
+
+        // instancesWithFailedSteps: NON-terminated docs with >=1 Failed pointer.
+        const failedAgg = await this.workflowCollection.aggregate([
+            {
+                $match: {
+                    ...filter,
+                    status: { $ne: WorkflowStatus.Terminated },
+                    "executionPointers.status": PointerStatus.Failed
+                }
+            },
+            { $group: { _id: "$workflowDefinitionId", cnt: { $sum: 1 } } }
+        ]).toArray();
+        const instancesWithFailedSteps: Record<string, number> = {};
+        for (const r of failedAgg) {
+            instancesWithFailedSteps[r._id] = Number(r.cnt);
+        }
+
+        return { total, byStatus, averageCompletionTimeMs, byDefinition, instancesWithFailedSteps };
+    }
+
+    public async getWorkflowInstanceTimeSeries(query: WorkflowTimeSeriesQuery): Promise<WorkflowTimeSeriesPoint[]> {
+        const match: Filter<any> = {
+            createTime: { $gte: query.from, $lte: query.to },
+            ...(query.tenantId !== undefined ? { tenantId: query.tenantId } : {})
+        };
+        const rows = await this.workflowCollection.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    // UTC day bucket.
+                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createTime", timezone: "UTC" } },
+                    total: { $sum: 1 },
+                    complete: { $sum: { $cond: [{ $eq: ["$status", WorkflowStatus.Complete] }, 1, 0] } },
+                    terminated: { $sum: { $cond: [{ $eq: ["$status", WorkflowStatus.Terminated] }, 1, 0] } }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]).toArray();
+        return rows.map((r) => ({
+            date: r._id,
+            total: Number(r.total),
+            complete: Number(r.complete),
+            terminated: Number(r.terminated)
+        }));
+    }
+
+    public async deleteWorkflowInstance(id: string): Promise<boolean> {
+        const oid = this.toObjectId(id);
+        if (!oid) return false;
+        const result = await this.workflowCollection.deleteOne({ _id: oid });
+        return result.deletedCount > 0;
+    }
+
+    public async deleteWorkflowInstances(ids: string[]): Promise<number> {
+        if (!ids || ids.length === 0) return 0;
+        const oids = ids.map((id) => this.toObjectId(id)).filter((o): o is ObjectId => o !== null);
+        if (oids.length === 0) return 0;
+        const result = await this.workflowCollection.deleteMany({ _id: { $in: oids } });
+        return result.deletedCount;
+    }
+
+    public async deleteWorkflowInstancesByDefinitionId(workflowDefinitionId: string, tenantId?: string): Promise<number> {
+        const filter: Filter<any> = {
+            workflowDefinitionId,
+            ...(tenantId !== undefined ? { tenantId } : {})
+        };
+        const result = await this.workflowCollection.deleteMany(filter);
+        return result.deletedCount;
+    }
+
+    /** Translate a WorkflowInstanceQuery into a Mongo filter (AND of all provided filters). */
+    private buildFilter(query: WorkflowInstanceQuery): Filter<any> {
+        const filter: any = {};
+
+        if (query.tenantId !== undefined) filter.tenantId = query.tenantId;
+
+        if (query.workflowDefinitionId !== undefined) {
+            if (query.workflowDefinitionId.indexOf("*") >= 0) {
+                // Anchored wildcard: '*' -> '.*', everything else literal. Escape each
+                // segment between wildcards so regex metacharacters stay literal.
+                const pattern = "^" + query.workflowDefinitionId
+                    .split("*")
+                    .map((seg) => this.escapeRegex(seg))
+                    .join(".*") + "$";
+                filter.workflowDefinitionId = { $regex: new RegExp(pattern) };
+            } else {
+                filter.workflowDefinitionId = query.workflowDefinitionId;
+            }
+        }
+
+        if (query.status !== undefined) {
+            filter.status = Array.isArray(query.status) ? { $in: query.status } : query.status;
+        }
+
+        const createTime: any = {};
+        if (query.createdAfter !== undefined) createTime.$gte = query.createdAfter;
+        if (query.createdBefore !== undefined) createTime.$lte = query.createdBefore;
+        if (Object.keys(createTime).length > 0) filter.createTime = createTime;
+
+        const completeTime: any = {};
+        if (query.completedAfter !== undefined) completeTime.$gte = query.completedAfter;
+        if (query.completedBefore !== undefined) completeTime.$lte = query.completedBefore;
+        if (Object.keys(completeTime).length > 0) filter.completeTime = completeTime;
+
+        if (query.searchTerm !== undefined && query.searchTerm !== "") {
+            // Case-insensitive substring over workflowDefinitionId | description | id.
+            const rx = new RegExp(this.escapeRegex(query.searchTerm), "i");
+            filter.$or = [
+                { workflowDefinitionId: { $regex: rx } },
+                { description: { $regex: rx } },
+                { id: { $regex: rx } }
+            ];
+        }
+
+        return filter as Filter<any>;
+    }
+
+    /** Escape regex metacharacters (leaving '*' to be handled by the caller). */
+    private escapeRegex(value: string): string {
+        return value.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
     }
 
     /** Close the underlying MongoClient. */

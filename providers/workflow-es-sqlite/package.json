@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es-sqlite",
-  "version": "1.0.0-reactory.0",
+  "version": "1.0.0-reactory.1",
   "description": "Embedded SQLite persistence provider for Workflow ES (Reactory fork)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",

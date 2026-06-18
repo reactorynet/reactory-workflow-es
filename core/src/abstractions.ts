@@ -2,6 +2,7 @@ export * from "./abstractions/workflow-base";
 export * from "./abstractions/step-body";
 export * from "./abstractions/inline-step-body";
 export * from "./abstractions/persistence-provider";
+export * from "./abstractions/workflow-query";
 export * from "./abstractions/queue-provider";
 export * from "./abstractions/distributed-lock-provider";
 export * from "./abstractions/workflow-executor";

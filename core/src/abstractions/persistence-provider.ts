@@ -1,4 +1,10 @@
 import { WorkflowInstance, EventSubscription, Event } from "../models";
+import {
+    WorkflowInstanceQuery,
+    WorkflowInstanceStats,
+    WorkflowTimeSeriesQuery,
+    WorkflowTimeSeriesPoint
+} from "./workflow-query";
 
 /**
  * Persistence contract for the workflow engine.
@@ -87,5 +93,64 @@ export interface IPersistenceProvider {
      * tenantId === `tenantId` (required).
      */
     getEvents(tenantId: string, eventName: string, eventKey: any, asOf: Date): Promise<Array<string>>;
+
+    // ── M9 — store-agnostic query / aggregation / time-series / delete surface ──
+    //
+    // These are read/delete-only methods used by the express workflow read layer
+    // (history, stats, inspector, search, recent, delete). They MUST NOT mutate
+    // instance state, concurrencyToken, or events/subscriptions, and MUST NOT
+    // participate in the compare-and-set path (spec §6 rule 10). Every
+    // non-deprecated provider implements them natively; memory is the reference
+    // semantics and the shared conformance suite is the arbiter (spec §6 rule 9).
+    // See docs/specs/m9-persistence-query-contract.md and ./workflow-query.ts.
+
+    /**
+     * M9 — filtered, sorted, paginated history query. Returns matching full
+     * WorkflowInstance objects (identical shape to getWorkflowInstance, incl.
+     * executionPointers / id / data / tenantId / concurrencyToken) plus the
+     * unpaged match count.
+     *
+     * All provided {@link WorkflowInstanceQuery} fields combine with AND. Default
+     * sort is `createTime desc` with an `id` tie-break for stable pagination;
+     * default skip 0 / take 50, take capped at 500. Omitting `tenantId` matches
+     * all tenants. See spec §6 rules 1–4, 7.
+     */
+    queryWorkflowInstances(query: WorkflowInstanceQuery): Promise<{ instances: WorkflowInstance[]; total: number }>;
+
+    /**
+     * M9 — aggregated statistics scoped by the same filters as
+     * queryWorkflowInstances (omit = whole store). `byStatus` maps every present
+     * WorkflowStatus to its count and sums to `total`; `averageCompletionTimeMs`
+     * is the mean of (completeTime - createTime) over Complete instances (null if
+     * none); `byDefinition` is sorted by total desc and capped to `topDefinitions`
+     * (default 20); `instancesWithFailedSteps` counts, per definition, NON-terminated
+     * instances with ≥1 Failed pointer. See spec §6 rules 5, 7.
+     */
+    getWorkflowInstanceStats(query?: WorkflowInstanceQuery & { topDefinitions?: number }): Promise<WorkflowInstanceStats>;
+
+    /**
+     * M9 — daily (UTC) time-series of instance counts by `createTime` over the
+     * inclusive `[from, to]` day range, one point per day that has ≥1 instance,
+     * ordered by date asc. Days with no instances MAY be omitted. See spec §6 rule 6.
+     */
+    getWorkflowInstanceTimeSeries(query: WorkflowTimeSeriesQuery): Promise<WorkflowTimeSeriesPoint[]>;
+
+    /**
+     * M9 — hard-delete one instance (and its owned execution pointers in SQL
+     * providers). Returns true iff a row existed and was removed. See spec §6 rule 8.
+     */
+    deleteWorkflowInstance(id: string): Promise<boolean>;
+
+    /**
+     * M9 — hard-delete many instances by id; returns the number removed. Missing
+     * ids are ignored (idempotent). See spec §6 rule 8.
+     */
+    deleteWorkflowInstances(ids: string[]): Promise<number>;
+
+    /**
+     * M9 — hard-delete all instances for a definition (scoped by `tenantId` when
+     * given); returns the count removed. See spec §6 rule 8.
+     */
+    deleteWorkflowInstancesByDefinitionId(workflowDefinitionId: string, tenantId?: string): Promise<number>;
 
 }

@@ -26,7 +26,7 @@
 
 import { IPersistenceProvider } from "../../abstractions/persistence-provider";
 import { WorkflowInstance } from "../../models/workflow-instance";
-import { ExecutionPointer } from "../../models/execution-pointer";
+import { ExecutionPointer, PointerStatus } from "../../models/execution-pointer";
 import { EventSubscription } from "../../models/event-subscription";
 import { Event } from "../../models/event";
 import { WorkflowStatus } from "../../models/workflow-status";
@@ -642,5 +642,383 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             });
         });
 
+        // ── M9 query / stats / time-series / delete ───────────────────────────
+        // Store-agnostic read layer. Seeds a known fixture set (several instances
+        // across 2 definitions, 2 tenants, mixed statuses, known create/complete
+        // times, some with a Failed pointer) and asserts every §6 rule. Memory is
+        // the reference semantics; all providers MUST produce equivalent results.
+        //
+        // Fixtures are created on a FRESH store: the suite resets here so prior
+        // blocks' rows do not pollute store-wide stats/time-series counts.
+
+        describe("M9 query / stats / time-series / delete", () => {
+
+            // Fixed UTC timestamps so date-bucketing is deterministic regardless of
+            // the machine's local timezone.
+            const D1 = "2024-01-10";
+            const D2 = "2024-01-11";
+            const D3 = "2024-01-12";
+            const at = (isoDate: string, hh = 12): Date => new Date(`${isoDate}T${String(hh).padStart(2, "0")}:00:00.000Z`);
+
+            // Map of fixture label -> persisted id (ids are provider-generated).
+            const ids: Record<string, string> = {};
+
+            // Helper: create a fully-specified instance and remember its id.
+            async function seed(label: string, spec: {
+                tenantId?: string;
+                workflowDefinitionId: string;
+                description?: string;
+                status: number;
+                createTime: Date;
+                completeTime?: Date;
+                failedPointer?: boolean;
+            }): Promise<void> {
+                const wf = new WorkflowInstance();
+                if (spec.tenantId !== undefined) wf.tenantId = spec.tenantId;
+                wf.workflowDefinitionId = spec.workflowDefinitionId;
+                wf.version = 1;
+                wf.description = spec.description;
+                wf.status = spec.status;
+                wf.nextExecution = 0;
+                wf.data = { label };
+                wf.createTime = spec.createTime;
+                wf.completeTime = spec.completeTime;
+                await provider.createNewWorkflow(wf);
+                ids[label] = wf.id;
+
+                // createNewWorkflow does not persist createTime/completeTime/status
+                // changes made after construction in every provider's create path
+                // uniformly, so persist them via the normal update path. This also
+                // attaches the Failed pointer when requested.
+                const loaded = await provider.getWorkflowInstance(wf.id);
+                loaded.status = spec.status;
+                loaded.createTime = spec.createTime;
+                loaded.completeTime = spec.completeTime;
+                loaded.description = spec.description;
+                if (spec.failedPointer) {
+                    const p = new ExecutionPointer();
+                    // UUID-format id: the SQL providers store pointer ids in a UUID column.
+                    p.id = crypto.randomUUID();
+                    p.stepId = 0;
+                    p.active = false;
+                    p.stepName = "failing-step";
+                    p.status = PointerStatus.Failed;
+                    loaded.executionPointers = [p];
+                }
+                await provider.persistWorkflow(loaded);
+            }
+
+            beforeAll(async () => {
+                // Start from a clean store so store-wide stats are predictable.
+                await options.reset(provider);
+
+                // Tenant alpha, definition "order" — 4 instances.
+                //   alpha-order-complete-1: Complete, create D1, complete D1+5min  (duration 300000ms)
+                //   alpha-order-complete-2: Complete, create D2, complete D2+15min (duration 900000ms)
+                //   alpha-order-runnable:   Runnable, create D2 (no completeTime)
+                //   alpha-order-terminated: Terminated, create D3, has a Failed pointer (terminated => NOT counted in failed-steps)
+                await seed("alpha-order-complete-1", {
+                    tenantId: "alpha", workflowDefinitionId: "order-workflow", description: "First order",
+                    status: WorkflowStatus.Complete, createTime: at(D1), completeTime: new Date(at(D1).getTime() + 300_000)
+                });
+                await seed("alpha-order-complete-2", {
+                    tenantId: "alpha", workflowDefinitionId: "order-workflow", description: "Second order",
+                    status: WorkflowStatus.Complete, createTime: at(D2), completeTime: new Date(at(D2).getTime() + 900_000)
+                });
+                await seed("alpha-order-runnable", {
+                    tenantId: "alpha", workflowDefinitionId: "order-workflow", description: "Pending order",
+                    status: WorkflowStatus.Runnable, createTime: at(D2)
+                });
+                await seed("alpha-order-terminated", {
+                    tenantId: "alpha", workflowDefinitionId: "order-workflow", description: "Cancelled order",
+                    status: WorkflowStatus.Terminated, createTime: at(D3), failedPointer: true
+                });
+
+                // Tenant alpha, definition "invoice" — 2 instances, one Runnable with a Failed pointer.
+                await seed("alpha-invoice-runnable-failed", {
+                    tenantId: "alpha", workflowDefinitionId: "invoice-workflow", description: "Invoice with error",
+                    status: WorkflowStatus.Runnable, createTime: at(D1), failedPointer: true
+                });
+                await seed("alpha-invoice-complete", {
+                    tenantId: "alpha", workflowDefinitionId: "invoice-workflow", description: "Paid invoice",
+                    status: WorkflowStatus.Complete, createTime: at(D3), completeTime: new Date(at(D3).getTime() + 600_000)
+                });
+
+                // Tenant beta, definition "order" — 1 instance (tenant isolation).
+                await seed("beta-order-runnable", {
+                    tenantId: "beta", workflowDefinitionId: "order-workflow", description: "Beta order",
+                    status: WorkflowStatus.Runnable, createTime: at(D2)
+                });
+            });
+
+            // ── §8 Failing-first ──────────────────────────────────────────────
+
+            it("queryWorkflowInstances filters by workflowDefinitionId + status and paginates", async () => {
+                const result = await provider.queryWorkflowInstances({
+                    tenantId: "alpha",
+                    workflowDefinitionId: "order-workflow",
+                    status: WorkflowStatus.Complete
+                });
+                expect(result.total).toEqual(2);
+                expect(result.instances.length).toEqual(2);
+                const labels = result.instances.map(i => i.data.label).sort();
+                expect(labels).toEqual(["alpha-order-complete-1", "alpha-order-complete-2"]);
+            });
+
+            // ── Filtering ─────────────────────────────────────────────────────
+
+            it("returns full WorkflowInstance objects (id, data, executionPointers, tenantId, concurrencyToken)", async () => {
+                const result = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "invoice-workflow", status: WorkflowStatus.Runnable });
+                expect(result.instances.length).toEqual(1);
+                const inst = result.instances[0];
+                expect(inst.id).toEqual(ids["alpha-invoice-runnable-failed"]);
+                expect(inst.tenantId).toEqual("alpha");
+                expect(inst.data).toEqual({ label: "alpha-invoice-runnable-failed" });
+                expect(inst.concurrencyToken).toBeGreaterThanOrEqual(0);
+                expect(inst.executionPointers.length).toEqual(1);
+                expect(inst.executionPointers[0].status).toEqual(PointerStatus.Failed);
+            });
+
+            it("wildcard workflowDefinitionId matches via '*'", async () => {
+                const result = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order*" });
+                expect(result.total).toEqual(4);
+                const ok = result.instances.every(i => i.workflowDefinitionId === "order-workflow");
+                expect(ok).toBe(true);
+            });
+
+            it("status array matches any-of", async () => {
+                const result = await provider.queryWorkflowInstances({
+                    tenantId: "alpha",
+                    workflowDefinitionId: "order-workflow",
+                    status: [WorkflowStatus.Complete, WorkflowStatus.Terminated]
+                });
+                expect(result.total).toEqual(3);
+            });
+
+            it("date range filters by createTime (createdAfter/createdBefore)", async () => {
+                const result = await provider.queryWorkflowInstances({
+                    tenantId: "alpha",
+                    createdAfter: at(D2, 0),
+                    createdBefore: at(D2, 23)
+                });
+                // alpha rows on D2: order-complete-2, order-runnable
+                expect(result.total).toEqual(2);
+                const labels = result.instances.map(i => i.data.label).sort();
+                expect(labels).toEqual(["alpha-order-complete-2", "alpha-order-runnable"]);
+            });
+
+            it("completedAfter/Before filters by completeTime", async () => {
+                const result = await provider.queryWorkflowInstances({
+                    tenantId: "alpha",
+                    completedAfter: at(D3, 0)
+                });
+                // only alpha-invoice-complete completes on D3
+                expect(result.total).toEqual(1);
+                expect(result.instances[0].data.label).toEqual("alpha-invoice-complete");
+            });
+
+            it("searchTerm matches workflowDefinitionId | description | id (case-insensitive)", async () => {
+                const byDesc = await provider.queryWorkflowInstances({ tenantId: "alpha", searchTerm: "CANCELLED" });
+                expect(byDesc.total).toEqual(1);
+                expect(byDesc.instances[0].data.label).toEqual("alpha-order-terminated");
+
+                const byDef = await provider.queryWorkflowInstances({ tenantId: "alpha", searchTerm: "invoice" });
+                expect(byDef.total).toEqual(2);
+
+                const byId = await provider.queryWorkflowInstances({ tenantId: "alpha", searchTerm: ids["alpha-order-runnable"] });
+                expect(byId.total).toEqual(1);
+                expect(byId.instances[0].id).toEqual(ids["alpha-order-runnable"]);
+            });
+
+            // ── Sorting & pagination ──────────────────────────────────────────
+
+            it("sorts by createTime desc by default; asc honoured", async () => {
+                const desc = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow" });
+                const descTimes = desc.instances.map(i => new Date(i.createTime).getTime());
+                for (let k = 1; k < descTimes.length; k++) expect(descTimes[k - 1]).toBeGreaterThanOrEqual(descTimes[k]);
+
+                const asc = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow", sortOrder: "asc" });
+                const ascTimes = asc.instances.map(i => new Date(i.createTime).getTime());
+                for (let k = 1; k < ascTimes.length; k++) expect(ascTimes[k - 1]).toBeLessThanOrEqual(ascTimes[k]);
+            });
+
+            it("breaks ties by id for stable pagination", async () => {
+                // alpha-order-complete-2 and alpha-order-runnable share createTime D2.
+                const sortField = "createTime";
+                const page1 = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow", sortField, sortOrder: "asc", skip: 0, take: 100 });
+                const page2 = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow", sortField, sortOrder: "asc", skip: 0, take: 100 });
+                // Deterministic ordering across identical queries.
+                expect(page1.instances.map(i => i.id)).toEqual(page2.instances.map(i => i.id));
+                // Among the two D2 rows, id order is the tie-break.
+                const d2 = page1.instances.filter(i => i.data.label === "alpha-order-complete-2" || i.data.label === "alpha-order-runnable");
+                expect(d2.length).toEqual(2);
+                expect(d2[0].id <= d2[1].id).toBe(true);
+            });
+
+            it("paginates via skip/take and reports unpaged total", async () => {
+                const all = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow", sortOrder: "asc", take: 100 });
+                const pageA = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow", sortOrder: "asc", skip: 0, take: 2 });
+                const pageB = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow", sortOrder: "asc", skip: 2, take: 2 });
+                expect(pageA.total).toEqual(4);
+                expect(pageB.total).toEqual(4);
+                expect(pageA.instances.length).toEqual(2);
+                expect(pageB.instances.length).toEqual(2);
+                expect(pageA.instances.map(i => i.id)).toEqual(all.instances.slice(0, 2).map(i => i.id));
+                expect(pageB.instances.map(i => i.id)).toEqual(all.instances.slice(2, 4).map(i => i.id));
+            });
+
+            it("caps take at 500", async () => {
+                const result = await provider.queryWorkflowInstances({ tenantId: "alpha", take: 100000 });
+                // We cannot exceed 500 rows here, but the request must not throw and
+                // must return at most 500. Total is the true unpaged count.
+                expect(result.instances.length).toBeLessThanOrEqual(500);
+                expect(result.total).toEqual(6);
+            });
+
+            // ── Tenant scoping ────────────────────────────────────────────────
+
+            it("query scopes by tenant; omit = all tenants", async () => {
+                const beta = await provider.queryWorkflowInstances({ tenantId: "beta", workflowDefinitionId: "order-workflow" });
+                expect(beta.total).toEqual(1);
+                expect(beta.instances[0].data.label).toEqual("beta-order-runnable");
+
+                const all = await provider.queryWorkflowInstances({ workflowDefinitionId: "order-workflow" });
+                expect(all.total).toEqual(5); // 4 alpha + 1 beta
+            });
+
+            // ── Stats ─────────────────────────────────────────────────────────
+
+            it("stats byStatus sums to total (tenant-scoped)", async () => {
+                const stats = await provider.getWorkflowInstanceStats({ tenantId: "alpha" });
+                expect(stats.total).toEqual(6);
+                const sum = Object.values(stats.byStatus).reduce((a, b) => a + b, 0);
+                expect(sum).toEqual(stats.total);
+                expect(stats.byStatus[WorkflowStatus.Complete]).toEqual(3);
+                expect(stats.byStatus[WorkflowStatus.Runnable]).toEqual(2);
+                expect(stats.byStatus[WorkflowStatus.Terminated]).toEqual(1);
+            });
+
+            it("averageCompletionTimeMs is the mean over Complete instances", async () => {
+                // alpha Complete durations: 300000, 900000, 600000 -> mean 600000
+                const stats = await provider.getWorkflowInstanceStats({ tenantId: "alpha" });
+                expect(stats.averageCompletionTimeMs).toBeCloseTo(600_000, 0);
+            });
+
+            it("averageCompletionTimeMs is null when there are no Complete instances", async () => {
+                const stats = await provider.getWorkflowInstanceStats({ tenantId: "beta" });
+                expect(stats.averageCompletionTimeMs).toBeNull();
+            });
+
+            it("byDefinition rolls up total/complete/terminated sorted by total desc", async () => {
+                const stats = await provider.getWorkflowInstanceStats({ tenantId: "alpha" });
+                expect(stats.byDefinition.length).toEqual(2);
+                // order-workflow has 4 (more than invoice's 2) so it leads.
+                expect(stats.byDefinition[0].workflowDefinitionId).toEqual("order-workflow");
+                expect(stats.byDefinition[0].total).toEqual(4);
+                expect(stats.byDefinition[0].complete).toEqual(2);
+                expect(stats.byDefinition[0].terminated).toEqual(1);
+                expect(stats.byDefinition[1].workflowDefinitionId).toEqual("invoice-workflow");
+                expect(stats.byDefinition[1].total).toEqual(2);
+                expect(stats.byDefinition[1].complete).toEqual(1);
+                expect(stats.byDefinition[1].terminated).toEqual(0);
+            });
+
+            it("byDefinition respects topDefinitions cap", async () => {
+                const stats = await provider.getWorkflowInstanceStats({ tenantId: "alpha", topDefinitions: 1 });
+                expect(stats.byDefinition.length).toEqual(1);
+                expect(stats.byDefinition[0].workflowDefinitionId).toEqual("order-workflow");
+            });
+
+            it("instancesWithFailedSteps counts non-terminated instances with a Failed pointer", async () => {
+                const stats = await provider.getWorkflowInstanceStats({ tenantId: "alpha" });
+                // alpha-invoice-runnable-failed: Runnable + Failed pointer -> counted under invoice-workflow.
+                // alpha-order-terminated: Terminated + Failed pointer -> NOT counted.
+                expect(stats.instancesWithFailedSteps["invoice-workflow"]).toEqual(1);
+                expect(stats.instancesWithFailedSteps["order-workflow"]).toBeUndefined();
+            });
+
+            it("stats with no query scope the whole store", async () => {
+                const stats = await provider.getWorkflowInstanceStats();
+                expect(stats.total).toEqual(7); // 6 alpha + 1 beta
+            });
+
+            // ── Time series ───────────────────────────────────────────────────
+
+            it("time series buckets by UTC day, ordered asc, with total/complete/terminated", async () => {
+                const points = await provider.getWorkflowInstanceTimeSeries({ tenantId: "alpha", from: at(D1, 0), to: at(D3, 23) });
+                // Days present for alpha: D1 (2 created), D2 (2 created), D3 (2 created).
+                const byDate: Record<string, WorkflowTimeSeriesPointShape> = {};
+                for (const p of points) byDate[p.date] = p;
+                const dates = points.map(p => p.date);
+                // ordered ascending
+                expect(dates).toEqual([...dates].sort());
+                expect(byDate[D1]).toBeDefined();
+                expect(byDate[D1].total).toEqual(2);   // order-complete-1 + invoice-runnable-failed
+                expect(byDate[D1].complete).toEqual(1);
+                expect(byDate[D2].total).toEqual(2);   // order-complete-2 + order-runnable
+                expect(byDate[D2].complete).toEqual(1);
+                expect(byDate[D3].total).toEqual(2);   // order-terminated + invoice-complete
+                expect(byDate[D3].complete).toEqual(1);
+                expect(byDate[D3].terminated).toEqual(1);
+            });
+
+            it("time series scopes by tenant", async () => {
+                const points = await provider.getWorkflowInstanceTimeSeries({ tenantId: "beta", from: at(D1, 0), to: at(D3, 23) });
+                const totals = points.reduce((a, p) => a + p.total, 0);
+                expect(totals).toEqual(1);
+            });
+
+            // ── Deletes ───────────────────────────────────────────────────────
+
+            it("deleteWorkflowInstance returns true and removes the row (and its pointers)", async () => {
+                const id = ids["alpha-invoice-runnable-failed"];
+                const removed = await provider.deleteWorkflowInstance(id);
+                expect(removed).toBe(true);
+                const reloaded = await provider.getWorkflowInstance(id);
+                expect(reloaded).toBeUndefined();
+                const q = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "invoice-workflow" });
+                expect(q.instances.map(i => i.id)).not.toContain(id);
+                // Failed-steps rollup no longer counts the deleted instance.
+                const stats = await provider.getWorkflowInstanceStats({ tenantId: "alpha" });
+                expect(stats.instancesWithFailedSteps["invoice-workflow"]).toBeUndefined();
+            });
+
+            it("deleteWorkflowInstance returns false for an unknown id", async () => {
+                const removed = await provider.deleteWorkflowInstance("00000000-0000-4000-8000-000000000099");
+                expect(removed).toBe(false);
+            });
+
+            it("deleteWorkflowInstances returns the count removed and is idempotent on missing ids", async () => {
+                const present = ids["alpha-order-runnable"];
+                const missing = "00000000-0000-4000-8000-0000000000aa";
+                const count = await provider.deleteWorkflowInstances([present, missing]);
+                expect(count).toEqual(1);
+                expect(await provider.getWorkflowInstance(present)).toBeUndefined();
+                // second call removes nothing.
+                const again = await provider.deleteWorkflowInstances([present, missing]);
+                expect(again).toEqual(0);
+            });
+
+            it("deleteWorkflowInstancesByDefinitionId removes all matching, tenant-scoped", async () => {
+                // beta order should NOT be touched when deleting alpha order-workflow.
+                const count = await provider.deleteWorkflowInstancesByDefinitionId("order-workflow", "alpha");
+                // Remaining alpha order rows: complete-1, complete-2, terminated (runnable was deleted above) = 3.
+                expect(count).toEqual(3);
+                const remainingAlpha = await provider.queryWorkflowInstances({ tenantId: "alpha", workflowDefinitionId: "order-workflow" });
+                expect(remainingAlpha.total).toEqual(0);
+                const beta = await provider.queryWorkflowInstances({ tenantId: "beta", workflowDefinitionId: "order-workflow" });
+                expect(beta.total).toEqual(1);
+            });
+        });
+
     }); // end describe `${providerName} persistence conformance`
+}
+
+// Local structural alias so the suite does not import value-less type-only names
+// across moduleResolution settings; mirrors WorkflowTimeSeriesPoint.
+interface WorkflowTimeSeriesPointShape {
+    date: string;
+    total: number;
+    complete: number;
+    terminated: number;
 }

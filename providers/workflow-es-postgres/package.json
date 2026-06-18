@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es-postgres",
-  "version": "1.0.0-reactory.0",
+  "version": "1.0.0-reactory.1",
   "description": "PostgreSQL persistence provider for Workflow ES (Reactory fork)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
