@@ -88,7 +88,7 @@ resilience for both; Phases 2–3 are operability, security, and hardening.
 | 16 | M1 | Workflow-definition version-safety on load | Both | Medium | `[copilot+review]` | done | `specs/m1-version-safety.md` |
 | 17 | M3 | Document & guard execution model (worker thread for Electron) | Electron | Medium | `[claude]` | done | `specs/m3-execution-model.md` |
 | **Phase 4 — Store-agnostic read layer (post-audit)** |
-| 18 | M9 | Persistence query/aggregation/delete contract + store-agnostic read layer | Both | High | `[claude]` / `[copilot+review]` | wip | `specs/m9-persistence-query-contract.md` |
+| 18 | M9 | Persistence query/aggregation/delete contract + store-agnostic read layer | Both | High | `[claude]` / `[copilot+review]` | done | `specs/m9-persistence-query-contract.md` |
 
 > IDs `C*/H*/M*` map 1:1 to the enterprise audit (Critical / High / Medium). They are stable: never
 > renumber. New items append with the next free number in their severity class. **M9** is a
