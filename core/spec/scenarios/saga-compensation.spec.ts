@@ -76,8 +76,8 @@ describe("saga compensation scenario", () => {
         });
     });
 
-    afterAll(() => {
-        host.stop();
+    afterAll(async () => {
+        await host.stop();
     });
 
     it("should have run the saga body up to and including the failing step", () => {
@@ -177,8 +177,8 @@ describe("saga revert scenario", () => {
         });
     });
 
-    afterAll(() => {
-        host.stop();
+    afterAll(async () => {
+        await host.stop();
     });
 
     it("should have executed both successful siblings and the failing step", () => {

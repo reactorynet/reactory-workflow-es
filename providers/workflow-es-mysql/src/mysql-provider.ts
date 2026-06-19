@@ -1,4 +1,18 @@
-import { IPersistenceProvider, WorkflowInstance, EventSubscription, Event, WorkflowStatus } from "workflow-es";
+/**
+ * @deprecated This package (`workflow-es-mysql`) is deprecated.
+ *
+ * MySQL support is available through `@reactorynet/workflow-es-postgres` using
+ * Sequelize's built-in multi-dialect support:
+ *
+ *   import { PostgresPersistence } from "@reactorynet/workflow-es-postgres";
+ *   const p = new PostgresPersistence(connectionString, { dialect: "mysql" });
+ *
+ * You will also need to install the `mysql2` driver:
+ *   npm install @reactorynet/workflow-es-postgres mysql2
+ *
+ * See: providers/workflow-es-postgres/README.md — "Using MySQL" section.
+ */
+import { IPersistenceProvider, WorkflowInstance, EventSubscription, Event, WorkflowStatus, WorkflowConcurrencyError } from "@reactorynet/workflow-es";
 import { Workflow as workflowCollection, Workflow } from "./models/workflow";
 import { Subscription as subscriptionCollection } from "./models/subscription";
 import { Event as eventCollection } from "./models/event";
@@ -29,6 +43,7 @@ export class MySqlPersistence implements IPersistenceProvider {
     let deferred = new Promise<string>( async (resolve, reject) => {
 
       try {
+        instance.concurrencyToken = 0;
         let workflow = await workflowCollection.create(instance, { include: [ExecutionPointer] });
         instance.id = workflow["id"].toString();
         resolve(instance.id);
@@ -42,11 +57,20 @@ export class MySqlPersistence implements IPersistenceProvider {
   public async persistWorkflow(instance: WorkflowInstance): Promise<void> {
     let deferred = new Promise<void>(async (resolve, reject) => {
       var id = instance.id;
+      const expected = instance.concurrencyToken ?? 0;
       delete instance["id"];
 
       try {
-        var workflow = await workflowCollection.findOne({ where: { id: id }, include: [ExecutionPointer] });
-        await workflow.updateAttributes(instance);
+        // Compare-and-set on the concurrency token. The update only matches when the
+        // stored token equals `expected`; 0 affected rows means another node wrote first.
+        const [affectedCount] = await workflowCollection.update(
+          { ...(instance as any), concurrencyToken: expected + 1 },
+          { where: { id: id, concurrencyToken: expected } }
+        );
+        if (!affectedCount) {
+          return reject(new WorkflowConcurrencyError(id, expected));
+        }
+        instance.concurrencyToken = expected + 1;
         resolve();
       } catch (err) {
         reject(err);

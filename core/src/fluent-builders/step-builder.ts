@@ -112,9 +112,11 @@ export class StepBuilder<TStepBody extends StepBody, TData> {
         return new StepBuilder<TNewStepBody, TData>(this.workflowBuilder, ancestor);
     }
 
-    public onError(behavior: number, retryInterval: number = null): StepBuilder<TStepBody, TData> {
+    public onError(behavior: number, retryInterval: number = null, maxRetries?: number): StepBuilder<TStepBody, TData> {
         this.step.errorBehavior = behavior;
         this.step.retryInterval = retryInterval;
+        if (maxRetries !== undefined)
+            this.step.maxRetries = maxRetries;
         return this;
     }
 

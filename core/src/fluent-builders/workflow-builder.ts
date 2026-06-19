@@ -8,6 +8,7 @@ export class WorkflowBuilder<TData> {
     private steps: Array<WorkflowStepBase> = [];
     public errorBehavior : number = WorkflowErrorHandling.Retry;
     public retryInterval : number = (60 * 1000);
+    public maxRetries? : number;        // undefined => WorkflowOptions.retry.defaultMaxRetries
 
     public build(id: string, version: number): WorkflowDefinition {
         var result = new WorkflowDefinition();
@@ -16,9 +17,10 @@ export class WorkflowBuilder<TData> {
         result.steps = this.steps;
         result.errorBehavior = this.errorBehavior;
         result.retryInterval = this.retryInterval;
+        result.maxRetries = this.maxRetries;
 
         return result;
-    }  
+    }
 
     public addStep(step: WorkflowStepBase) {
         step.id = this.steps.length;

@@ -7,5 +7,6 @@ export class WorkflowDefinition {
     public steps: Array<WorkflowStepBase> = [];
     public errorBehavior : number;
     public retryInterval : number;
+    public maxRetries? : number;        // undefined => fall back to WorkflowOptions.retry.defaultMaxRetries
 
 }

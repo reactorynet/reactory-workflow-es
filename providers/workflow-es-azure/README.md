@@ -2,12 +2,17 @@
 
 Provides distributed lock management and queue services on [Workflow ES](https://github.com/danielgerlag/workflow-es) using Azure Storage.
 
+> **Package renamed.** As of `2.4.0-reactory.0` this package is published as
+> `@reactorynet/workflow-es-azure` (was `workflow-es-azure`) and targets the
+> `@reactorynet/workflow-es` core. The core libs (`@reactorynet/workflow-es`,
+> `inversify`, `reflect-metadata`) are now peer dependencies.
+
 ## Installing
 
-Install the npm package "workflow-es-azure"
+Install the npm package "@reactorynet/workflow-es-azure"
 
 ```
-> npm install workflow-es-azure --save
+> npm install @reactorynet/workflow-es-azure --save
 ```
 
 ## Usage

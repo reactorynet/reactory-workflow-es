@@ -1,14 +1,13 @@
 {
-  "name": "workflow-es-mongodb",
-  "version": "2.1.1",
-  "description": "MongoDB provider for Workflow ES",
+  "name": "@reactorynet/workflow-es-mongodb",
+  "version": "1.0.0-reactory.4",
+  "description": "MongoDB persistence provider for Workflow ES (Reactory fork — driver v6)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "pretest": "docker pull mongo && docker run -p 27019:27017 --name workflow-es-tests -d mongo && npm run build",
-    "test": "jasmine",
-    "posttest": "docker kill workflow-es-tests && docker rm workflow-es-tests"
+    "pretest": "npm run build",
+    "test": "jasmine"
   },
   "keywords": [
     "workflow",
@@ -20,21 +19,24 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^6.0.51",
-    "@types/jasmine": "^2.5.38",
-    "jasmine": "^2.5.2",
-    "jasmine-core": "^2.4.1",
-    "typescript": "^2.2.1"
+    "@reactorynet/workflow-es": "file:../../core",
+    "@types/jasmine": "^4.6.0",
+    "@types/node": "^20.0.0",
+    "jasmine": "^5.0.0",
+    "jasmine-core": "^5.0.0",
+    "reflect-metadata": "^0.2.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "reflect-metadata": "^0.2.0"
   },
   "dependencies": {
-    "inversify": "^4.1.0",
-    "json-stable-stringify": "^1.0.1",
-    "mongodb": "^3.2.7",
-    "reflect-metadata": "^0.1.10",
-    "workflow-es": "^2.1.0"
+    "mongodb": "^6.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/danielgerlag/workflow-es.git"
+    "url": "git+https://github.com/reactorynet/reactory-workflow-es.git",
+    "directory": "providers/workflow-es-mongodb"
   }
 }

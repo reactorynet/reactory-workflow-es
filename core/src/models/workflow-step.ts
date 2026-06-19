@@ -17,6 +17,7 @@ export abstract class WorkflowStepBase {
     public children: Array<number> = [];
     public errorBehavior : number;
     public retryInterval : number = 60000;
+    public maxRetries? : number;        // undefined => fall back to definition / WorkflowOptions.retry.defaultMaxRetries
     public compensationStepId : number;
 
     public inputs: Array<(step: StepBody, data: any) => void> = [];

@@ -1,6 +1,6 @@
 import { injectable, inject } from "inversify";
 import { QueueService, createQueueService, ErrorOrResult, ErrorOrResponse, ServiceResponse } from "azure-storage";
-import { IQueueProvider, QueueType, TYPES, ILogger } from 'workflow-es';
+import { IQueueProvider, QueueType, TYPES, ILogger } from '@reactorynet/workflow-es';
 
 @injectable()
 export class AzureQueueProvider implements IQueueProvider {

@@ -5,6 +5,23 @@ import { IQueueProvider, QueueType } from "../abstractions";
 export class SingleNodeQueueProvider implements IQueueProvider {
     private workflowQueue: string[] = [];
     private eventQueue: string[] = [];
+    private started: boolean = false;
+
+    /**
+     * Dev-only fail-loud guard. The first WorkflowHost.start() on this singleton marks it
+     * started. A second host starting on the same singleton instance (the realistic
+     * in-process multi-host case) throws unless single-node providers were explicitly
+     * allowed. See spec C1 §6.9.
+     */
+    public markStarted(allowSingleNodeProviders: boolean): void {
+        if (this.started && !allowSingleNodeProviders) {
+            throw new Error(
+                "SingleNodeLockProvider/SingleNodeQueueProvider are dev-only and cannot be shared by " +
+                "multiple workflow hosts. Use a distributed provider (e.g. @reactorynet/workflow-es-redis) " +
+                "or call configureWorkflow().allowSingleNodeProviders(true) to override.");
+        }
+        this.started = true;
+    }
 
     public async queueForProcessing(id: string, queue: QueueType): Promise<void> {
         switch (queue) {
@@ -23,6 +40,18 @@ export class SingleNodeQueueProvider implements IQueueProvider {
                 return this.workflowQueue.shift();
             case QueueType.Event:
                 return this.eventQueue.shift();
+        }
+    }
+
+    /** M5 §5.4/§7: optional queue-depth probe backed by the in-memory arrays. */
+    public async getQueueLength(queue: QueueType): Promise<number> {
+        switch (queue) {
+            case QueueType.Workflow:
+                return this.workflowQueue.length;
+            case QueueType.Event:
+                return this.eventQueue.length;
+            default:
+                return 0;
         }
     }
 }

@@ -41,6 +41,11 @@ export class Workflow extends Model<Workflow> {
     @Column
     completeTime : Date;
 
+    // Optimistic-concurrency token (spec C1). Default 0; absent rows read as 0.
+    @Default(0)
+    @Column
+    concurrencyToken : number;
+
     @HasMany(() => ExecutionPointer)
     executionPointers : ExecutionPointer[];
 

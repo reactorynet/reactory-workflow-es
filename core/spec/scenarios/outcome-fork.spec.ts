@@ -66,8 +66,8 @@ describe("multiple outcomes", () => {
         });
     });
 
-    afterAll(() => {
-        host.stop();        
+    afterAll(async () => {
+        await host.stop();        
     });
     
     it("should be marked as complete", function() {

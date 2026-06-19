@@ -1,197 +1,65 @@
-import { IPersistenceProvider, WorkflowInstance, ExecutionPointer, Event } from "workflow-es";
+/**
+ * MongoDB persistence provider — shared IPersistenceProvider conformance suite (M8).
+ *
+ * This thin wrapper opts the MongoDB provider into the shared conformance suite
+ * defined in core/src/testing/conformance/persistence-conformance.ts.
+ *
+ * In CI, WORKFLOW_ES_MONGO_TEST_URL is set from the GitHub Actions mongo:7
+ * service container. Locally, point WORKFLOW_ES_MONGO_TEST_URL at a running
+ * mongo:7 instance, e.g.:
+ *
+ *   docker run -d -p 27017:27017 mongo:7
+ *   WORKFLOW_ES_MONGO_TEST_URL=mongodb://127.0.0.1:27017/workflow-es-test yarn test
+ *
+ * Falls back to the default local address when the env var is unset (handy if a
+ * local mongod is already running). If the connection fails, the spec fails with
+ * a clear connection error rather than a silent skip — that matches CI behaviour.
+ *
+ * If you genuinely have no Mongo available, set WORKFLOW_ES_MONGO_SKIP=1 to
+ * emit a pending() message instead of failing.
+ */
+import "reflect-metadata";
+import { runPersistenceProviderConformanceTests } from "@reactorynet/workflow-es";
 import { MongoDBPersistence } from "../src/mongodb-provider";
-import { getConnectionString } from "./helpers/config";
-var stringify = require('json-stable-stringify');
 
-describe("mongodb-provider", () => {
-    
-    var persistence: IPersistenceProvider;
-    var wf1: WorkflowInstance;  
-    var ev1: Event;  
-    var ev2: Event;  
+const MONGO_URL =
+    process.env.WORKFLOW_ES_MONGO_TEST_URL ||
+    "mongodb://127.0.0.1:27017/workflow-es-test";
 
-    beforeAll((done) => {
-        var mongoProvider = new MongoDBPersistence(getConnectionString());
-        mongoProvider.connect.then(() => {
-          
-            persistence = mongoProvider;
-            
-            done();
+const SKIP = process.env.WORKFLOW_ES_MONGO_SKIP === "1";
+
+if (SKIP) {
+    describe("mongodb provider (conformance)", () => {
+        it("skipped — WORKFLOW_ES_MONGO_SKIP=1 is set (no Mongo available)", () => {
+            pending(
+                "Set WORKFLOW_ES_MONGO_TEST_URL and unset WORKFLOW_ES_MONGO_SKIP to run " +
+                "the full conformance suite against a live MongoDB instance."
+            );
         });
     });
+} else {
+    runPersistenceProviderConformanceTests({
+        providerName: "mongodb",
 
-    describe("createNewWorkflow", () => { 
-        var returnedId: string;
-        
-        beforeEach((done) => {
-            wf1 = new WorkflowInstance();
-            return persistence.createNewWorkflow(wf1)
-                .then(id => {
-                    returnedId = id;
-                    done();
-                })
-                .catch(done.fail);            
-        });
+        createProvider: async () => {
+            const provider = new MongoDBPersistence(MONGO_URL);
+            await provider.connect;
+            return provider;
+        },
 
-        it("should return a generated id", function() {            
-            expect(returnedId).toBeDefined();
-        });
+        reset: async (provider) => {
+            // Drop all three collections and let the provider recreate them on
+            // the next operation — equivalent to sequelize.sync({ force: true })
+            // on the SQL providers.
+            const p = provider as MongoDBPersistence;
+            const db = (p as any).db;
+            for (const name of ["workflows", "subscriptions", "events"]) {
+                try { await db.collection(name).drop(); } catch { /* ignore — collection may not exist yet */ }
+            }
+        },
 
-        it("should return update original object with id", function() {            
-            expect(wf1.id).toBeDefined();
-        });
+        dispose: async (provider) => {
+            await (provider as MongoDBPersistence).close();
+        },
     });
-
-    describe("getWorkflowInstance", () => {
-        var wf2: WorkflowInstance;
-        beforeEach((done) => {            
-            persistence.getWorkflowInstance(wf1.id)
-                .then(wf => {                    
-                    wf2 = wf;
-                    done();
-                })
-                .catch(done.fail);            
-        });
-
-        it("should match the orignal", function() {
-            expect(stringify(wf2)).toBe(stringify(wf1));
-        });
-    });
-
-    describe("persistWorkflow", () => {
-        var modified: WorkflowInstance;
-        
-        beforeEach((done) => {    
-            modified = JSON.parse(JSON.stringify(wf1));            
-            modified.nextExecution = 44;
-            modified.executionPointers.push(new ExecutionPointer());        
-            persistence.persistWorkflow(modified)
-                .then(() => done())                
-                .catch(done.fail);            
-        });
-
-        it("should match the orignal", (done) => {
-            persistence.getWorkflowInstance(modified.id)
-                .then((data) => {
-                    delete data['_id']; //caveat
-                    expect(stringify(data)).toBe(stringify(modified));                    
-                    done();                            
-                })
-                .catch(done.fail);            
-        });
-    });
-
-    describe("createEvent isProcessed:false", () => { 
-        var returnedId: string;
-        
-        beforeEach((done) => {
-            ev1 = new Event();
-            ev1.eventName = 'test-event';
-            ev1.eventKey = "1";
-            ev1.eventData = null;
-            ev1.eventTime = new Date();
-            ev1.isProcessed = false;
-            return persistence.createEvent(ev1)
-                .then(id => {
-                    returnedId = id;
-                    done();
-                })
-                .catch(done.fail);            
-        });
-
-        it("should return a generated id", function() {            
-            expect(returnedId).toBeDefined();
-        });
-
-        it("should return update original object with id", function() {            
-            expect(ev1.id).toBeDefined();
-        });
-    });
-    
-    describe("createEvent isProcessed:true", () => { 
-        var returnedId: string;
-        
-        beforeEach((done) => {
-            ev2 = new Event();
-            ev2.eventName = 'test-event';
-            ev2.eventKey = "1";
-            ev2.eventData = null;
-            ev2.eventTime = new Date();
-            ev2.isProcessed = true;
-            return persistence.createEvent(ev2)
-                .then(id => {
-                    returnedId = id;
-                    done();
-                })
-                .catch(done.fail);            
-        });
-
-        it("should return a generated id", function() {            
-            expect(returnedId).toBeDefined();
-        });
-
-        it("should return update original object with id", function() {            
-            expect(ev2.id).toBeDefined();
-        });
-    });
-    
-    describe("getRunnableEvents", () => {
-        var returnedEvents: Array<string>;
-        
-        beforeEach((done) => {
-          return persistence.getRunnableEvents()
-              .then( events => {
-                returnedEvents = events;
-                done();
-              })
-              .catch(done.fail);
-        });
-        
-        it("should contain previous event id", function() {
-          expect(returnedEvents).toContain(ev1.id);
-        });
-        
-    });
-
-    describe("markEventProcessed", () => {
-      var eventResult1: Event;
-        beforeEach((done) => {
-            return persistence.markEventProcessed(ev1.id)
-                .then(() => {
-                  persistence.getEvent(ev1.id)
-                    .then((event) => {
-                      eventResult1 = event;
-                      done();
-                    })
-                })
-                .catch(done.fail);
-        });
-
-        it("should be 'true'", () => {
-            expect(eventResult1.isProcessed).toEqual(true);
-        })
-        
-
-    });
-
-    describe("markEventUnprocessed", () => {
-        var eventResult2: Event;
-        beforeEach((done) => {
-            return persistence.markEventUnprocessed(ev2.id)
-                .then(() => {
-                  persistence.getEvent(ev2.id)
-                    .then((event) => {
-                      eventResult2 = event;
-                      done();
-                    })
-                })
-                .catch(done.fail);
-        });
-        
-        it("should be 'false'", () => {
-            expect(eventResult2.isProcessed).toEqual(false);
-        })
-        
-    });
-
-});
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@reactorynet/workflow-es-sqlite",
+  "version": "1.0.0-reactory.1",
+  "description": "Embedded SQLite persistence provider for Workflow ES (Reactory fork)",
+  "main": "./build/src/index.js",
+  "typings": "./build/src/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:pack": "npm run build && npm pack",
+    "pretest": "npm run build",
+    "test": "jasmine"
+  },
+  "keywords": [
+    "workflow",
+    "saga",
+    "sqlite",
+    "embedded",
+    "electron"
+  ],
+  "author": {
+    "email": "wweber@zepz.io",
+    "name": "Werner Weber"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "inversify": "^6.0.0",
+    "reflect-metadata": "^0.2.0"
+  },
+  "devDependencies": {
+    "@reactorynet/workflow-es": "file:../../core",
+    "@types/jasmine": "^4.6.0",
+    "@types/node": "^20.0.0",
+    "jasmine": "^5.0.0",
+    "jasmine-core": "^5.0.0",
+    "reflect-metadata": "^0.2.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "sequelize": "^6.37.0",
+    "sequelize-typescript": "^2.1.6",
+    "sqlite3": "^5.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reactorynet/reactory-workflow-es.git",
+    "directory": "providers/workflow-es-sqlite"
+  }
+}

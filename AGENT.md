@@ -245,7 +245,7 @@ reference to point at the fresh artifact before running `yarn install` on the se
 
 ## Integration with Reactory Express Server
 
-All `import ... from 'workflow-es'` statements across 30 TypeScript files have been updated to
+All `import ... from '@reactorynet/workflow-es'` statements across 30 TypeScript files have been updated to
 `import ... from '@reactorynet/workflow-es'`. The affected modules are:
 
 - `src/modules/reactory-core/workflow/`

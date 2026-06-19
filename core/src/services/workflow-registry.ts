@@ -8,10 +8,20 @@ export class WorkflowRegistry implements IWorkflowRegistry {
     private registry: RegistryEntry[] = [];
 
     public getDefinition(id: string, version: number): WorkflowDefinition {
-        const item = this.registry.find(x => x.id === id && x.version === version);
-        if (!item)
+        const def = this.tryGetDefinition(id, version);
+        if (!def)
             throw new Error(`Workflow not registered: ${id}@${version}`);
-        return item.defintion;
+        return def;
+    }
+
+    /**
+     * M1 — Non-throwing variant: returns the definition or `undefined` on a miss.
+     * Used by the executor at load time so a missing (id, version) pair can be
+     * dead-lettered cleanly instead of propagating an exception.
+     */
+    public tryGetDefinition(id: string, version: number): WorkflowDefinition | undefined {
+        const item = this.registry.find(x => x.id === id && x.version === version);
+        return item ? item.defintion : undefined;
     }
 
     public registerWorkflow<TData>(workflow: WorkflowBase<TData>): void {

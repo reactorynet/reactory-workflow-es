@@ -1,7 +1,9 @@
 {
   "name": "workflow-es-mysql",
   "version": "1.0.0-beta.0",
-  "description": "MySQL provider for Workflow ES",
+  "description": "MySQL provider for Workflow ES — DEPRECATED. Use @reactorynet/workflow-es-postgres with { dialect: 'mysql' } instead.",
+  "private": true,
+  "deprecated": "This package is deprecated. MySQL support is available through @reactorynet/workflow-es-postgres using { dialect: 'mysql' } (Sequelize 6 is multi-dialect). Install mysql2 as an additional driver alongside pg/pg-hstore.",
   "main": ".build/src/index.js",
   "typings": "./build/src/index.d.ts",
   "scripts": {
@@ -20,21 +22,27 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@types/jasmine": "^3.3.1",
-    "@types/node": "^10.12.12",
-    "jasmine": "^3.3.1",
-    "jasmine-core": "^3.3.0",
-    "typescript": "^3.2.1"
+    "@reactorynet/workflow-es": "file:../../core",
+    "@types/jasmine": "^4.6.0",
+    "@types/node": "^20.0.0",
+    "jasmine": "^5.0.0",
+    "jasmine-core": "^5.0.0",
+    "reflect-metadata": "^0.2.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "inversify": "^6.0.0",
+    "reflect-metadata": "^0.2.0"
   },
   "dependencies": {
     "mysql2": "^1.6.4",
-    "reflect-metadata": "^0.1.12",
     "sequelize": "^4.41.2",
-    "sequelize-typescript": "^0.6.6",
-    "workflow-es": "^2.3.2"
+    "sequelize-typescript": "^0.6.6"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/danielgerlag/workflow-es.git"
+    "url": "git+https://github.com/reactorynet/reactory-workflow-es.git",
+    "directory": "providers/workflow-es-mysql"
   }
 }

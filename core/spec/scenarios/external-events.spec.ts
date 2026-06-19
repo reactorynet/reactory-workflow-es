@@ -1,4 +1,4 @@
-import { WorkflowHost, WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, configureWorkflow, ConsoleLogger } from "../../src";
+import { WorkflowHost, WorkflowBuilder, WorkflowStatus, WorkflowBase, StepBody, StepExecutionContext, ExecutionResult, WorkflowInstance, configureWorkflow, ConsoleLogger, DEFAULT_TENANT } from "../../src";
 import { MemoryPersistenceProvider } from "../../src/services/memory-persistence-provider";
 import { spinWait } from "../helpers/spin-wait";
 
@@ -42,7 +42,7 @@ import { spinWait } from "../helpers/spin-wait";
         workflowId = await host.startWorkflow("event-workflow", 1, { value1: 2, value2: 3 });
 
         await spinWait(async () => {
-            let subs = await persistence.getSubscriptions("my-event", "0", new Date());
+            let subs = await persistence.getSubscriptions(DEFAULT_TENANT, "my-event", "0", new Date());
             return (subs.length > 0);
         });
 
@@ -54,8 +54,8 @@ import { spinWait } from "../helpers/spin-wait";
         });
      });
 
-     afterAll(() => {
-         host.stop();        
+     afterAll(async () => {
+         await host.stop();        
      });
     
      it("should be marked as complete", function() {

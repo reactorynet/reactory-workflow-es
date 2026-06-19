@@ -1,6 +1,6 @@
 import { injectable, inject } from "inversify";
 import { BlobService, createBlobServiceWithSas, createBlobService, ErrorOrResult, ErrorOrResponse, ServiceResponse } from "azure-storage";
-import { IDistributedLockProvider, TYPES, ILogger } from 'workflow-es';
+import { IDistributedLockProvider, TYPES, ILogger } from '@reactorynet/workflow-es';
 
 @injectable()
 export class AzureLockManager implements IDistributedLockProvider {
@@ -22,14 +22,19 @@ export class AzureLockManager implements IDistributedLockProvider {
 
     public async acquireLock(id: string): Promise<boolean> {
         var self = this;
-        
-        if (!await this.createBlob(id))
+
+        // M6: `id` arrives tenant-namespaced (`tenant:resourceId`). ':' is not a
+        // safe Azure blob-name character, so sanitise to a blob name. The lease
+        // map is keyed by the SAME blob name so release/renew stay consistent.
+        const blobName = this.blobName(id);
+
+        if (!await this.createBlob(blobName))
             return false;
 
         return new Promise<boolean>((resolve, reject) => {
-            self.blobService.acquireLease(self.containerId, id, { leaseDuration: self.leaseDuration }, (error: Error, result: BlobService.LeaseResult, response: ServiceResponse): void => {
+            self.blobService.acquireLease(self.containerId, blobName, { leaseDuration: self.leaseDuration }, (error: Error, result: BlobService.LeaseResult, response: ServiceResponse): void => {
                 if (response.isSuccessful) {
-                    self.leases[id] = result.id;
+                    self.leases[blobName] = result.id;
                 }
                 resolve(response.isSuccessful);
             });
@@ -38,34 +43,44 @@ export class AzureLockManager implements IDistributedLockProvider {
 
     public async releaseLock(id: string): Promise<void> {
         var self = this;
-        let leaseId = this.leases[id];
-        
+        const blobName = this.blobName(id);
+        let leaseId = this.leases[blobName];
+
         if (!leaseId)
             return Promise.resolve();
 
-        self.leases[id] = null;
-        
+        self.leases[blobName] = null;
+
         return new Promise<void>((resolve, reject) => {
-            self.blobService.releaseLease(self.containerId, id, leaseId, (error: Error, result: BlobService.LeaseResult, response: ServiceResponse): void => {
+            self.blobService.releaseLease(self.containerId, blobName, leaseId, (error: Error, result: BlobService.LeaseResult, response: ServiceResponse): void => {
                 resolve();
             });
         });
     }
-    
 
-    private createBlob(id: string): Promise<boolean> {
+    /**
+     * M6: sanitise a (possibly tenant-namespaced) lock key into a legal Azure
+     * blob name. ':' is replaced with '-' consistently across create/acquire/
+     * release/renew so the same key always maps to the same blob.
+     */
+    private blobName(id: string): string {
+        return id.replace(/:/g, "-");
+    }
+
+    private createBlob(blobName: string): Promise<boolean> {
         var self = this;
         return new Promise<boolean>((resolve, reject) => {
-            self.blobService.createBlockBlobFromText(self.containerId, id, '', (error: Error, result: BlobService.BlobResult, response: ServiceResponse): void => {                
-                resolve(response.isSuccessful);                
+            self.blobService.createBlockBlobFromText(self.containerId, blobName, '', (error: Error, result: BlobService.BlobResult, response: ServiceResponse): void => {
+                resolve(response.isSuccessful);
             });
         });
     }
 
     private renewLeases(self: AzureLockManager) {
-        for (let id in self.leases) {
-            if (self.leases[id]) {
-                self.blobService.renewLease(self.containerId, id, self.leases[id], (error: Error, result: BlobService.LeaseResult, response: ServiceResponse): void => {
+        // `leases` is already keyed by the sanitised blob name.
+        for (let blobName in self.leases) {
+            if (self.leases[blobName]) {
+                self.blobService.renewLease(self.containerId, blobName, self.leases[blobName], (error: Error, result: BlobService.LeaseResult, response: ServiceResponse): void => {
                     //TODO: log
                 });
             }
