@@ -73,12 +73,12 @@ __metadata:
   linkType: soft
 
 "@reactorynet/workflow-es@file:../../core::locator=%40reactorynet%2Fworkflow-es-azure%40workspace%3A.":
-  version: 2.4.0-reactory.3
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=fdf5e3&locator=%40reactorynet%2Fworkflow-es-azure%40workspace%3A."
+  version: 2.4.0-reactory.4
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=7eda01&locator=%40reactorynet%2Fworkflow-es-azure%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/5a99d46deed81ef48148e51d67b2cc5087194eeb48679d98cfd2abca6498ab15224abda04741bd7e4d7cb8be91389bdb0b53644f2f9fe5b9ab429c4b6d2b94c0
+  checksum: 10c0/c9114b52b2e77767d056c6bedb4d20f87ce77d42fd223aba8a3850c8dd9b25ad2ba7d82780696a7bac94113f00816519be985685aed5bfafafd2c77a80eb308e
   languageName: node
   linkType: hard
 
