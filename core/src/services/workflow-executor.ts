@@ -341,7 +341,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
 
         // Transition instance to terminal dead-letter state.
         instance.status = WorkflowStatus.DeadLettered;
-        instance.nextExecution = null;
+        instance.nextExecution = -1;
 
         // Emit exactly one lifecycle event reusing H5's payload shape.
         const evt: WorkflowDeadLetteredEvent = {
@@ -406,7 +406,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
     }
 
     determineNextExecutionTime(instance: WorkflowInstance) {
-        instance.nextExecution = null;
+        instance.nextExecution = -1;
 
         if (instance.status == WorkflowStatus.Complete)
             return;
@@ -424,21 +424,22 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             instance.nextExecution = Math.min(pointer.sleepUntil, instance.nextExecution ? instance.nextExecution : pointer.sleepUntil);
         }
         
-        if (instance.nextExecution === null) {            
+        if (instance.nextExecution === -1) {            
             for (let pointer of instance.executionPointers.filter(x => x.active && x.children.length > 0)) {
                 
-                if (!instance.executionPointers.filter(x => x.scope.includes(pointer.id)).every(x => !!x.endTime)) 
+                let matchingChildren = instance.executionPointers.filter(x => x.scope.includes(pointer.id));
+                if (matchingChildren.length === 0 || !matchingChildren.every(x => !!x.endTime)) 
                     continue;
                 
                 if (!pointer.sleepUntil) {
                     instance.nextExecution = 0;
                     return;
                 }
-                instance.nextExecution = Math.min(pointer.sleepUntil, instance.nextExecution ? instance.nextExecution : pointer.sleepUntil);
+                instance.nextExecution = Math.min(pointer.sleepUntil, instance.nextExecution === -1 ? pointer.sleepUntil : Math.min(instance.nextExecution, pointer.sleepUntil));
             }            
         }
 
-        if ((instance.nextExecution === null) && (instance.executionPointers.every(x => Boolean(x.endTime)))) {
+        if ((instance.nextExecution === -1) && (instance.executionPointers.every(x => Boolean(x.endTime)))) {
             instance.completeTime = new Date();
             instance.status = WorkflowStatus.Complete;
         }
