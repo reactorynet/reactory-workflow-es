@@ -53,12 +53,12 @@ __metadata:
   linkType: hard
 
 "@reactorynet/workflow-es@file:../../core::locator=workflow-es-mysql%40workspace%3A.":
-  version: 2.4.0-reactory.0
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=60e9e3&locator=workflow-es-mysql%40workspace%3A."
+  version: 2.4.0-reactory.4
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=7eda01&locator=workflow-es-mysql%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/ac6131737e45e7bbefa972d8ed618cc40fd422a09f60bdf34875d98e29dd08e5115c6a065143699fdf97cc269cefef687d980cd4a6c36e65dff806f20ab7b2a1
+  checksum: 10c0/c9114b52b2e77767d056c6bedb4d20f87ce77d42fd223aba8a3850c8dd9b25ad2ba7d82780696a7bac94113f00816519be985685aed5bfafafd2c77a80eb308e
   languageName: node
   linkType: hard
 

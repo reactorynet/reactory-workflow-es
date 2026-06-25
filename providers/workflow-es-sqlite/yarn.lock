@@ -110,12 +110,12 @@ __metadata:
   linkType: soft
 
 "@reactorynet/workflow-es@file:../../core::locator=%40reactorynet%2Fworkflow-es-sqlite%40workspace%3A.":
-  version: 2.4.0-reactory.3
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=5cf5fb&locator=%40reactorynet%2Fworkflow-es-sqlite%40workspace%3A."
+  version: 2.4.0-reactory.4
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=cdcf50&locator=%40reactorynet%2Fworkflow-es-sqlite%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/291dab0e216aa2026d22200bda6f12761ce9a4fc016eb9ace0efb8b607ce587f0a5ea10fbc5c33764e4cdaa9b5279307584ad32162884e7d9246000b855825a7
+  checksum: 10c0/4b55622b508429bf47bed822fe6184845190a5374e7cef67677611759c5ee772190d6c9a25ada2326cc82f3382cb68af2f04023f8ad006e9fee6b40c04c02a35
   languageName: node
   linkType: hard
 
