@@ -170,13 +170,16 @@ export class EventQueueWorker implements IBackgroundWorker {
                         // M6 §6.5: scope subscription matching by the event's tenant — the
                         // sole runtime enforcement point of cross-tenant isolation.
                         let subs = await self.persistence.getSubscriptions(tenantId, evt.eventName, evt.eventKey, evt.eventTime);
-                        let success = true;
-
-                        for (let sub of subs)
-                            success = success && await self.seedSubscription(self, evt, sub);
-
-                        if (success)
-                            await self.persistence.markEventProcessed(eventId);
+                        
+                        for (let sub of subs) {
+                            let seeded = await self.seedSubscription(self, evt, sub);
+                            if (!seeded) {
+                                success = false;
+                                break;
+                            }
+                            // Mark each subscription as processed immediately after seeding to prevent re-seeding on crash.
+                            await self.persistence.markEventProcessed(eventId, sub.id);
+                        }
                     }
 
                 }
