@@ -123,7 +123,9 @@ cd core && yarn test            # or the specific scenario file
 ## 10. Backward compatibility & migration
 
 > Public API changes, on-disk/at-rest format changes, and impact on `reactory-express-server`. State
-> the version bump (`2.3.6-reactory.N` → ?) and any migration steps a consumer must run.
+> the version bump under **strict semver** (MAJOR = breaking, MINOR = additive, PATCH = fix; no
+> `-reactory.N` prerelease suffix — reserve real prerelease tags like `-rc.0` for genuine pre-releases)
+> and any migration steps a consumer must run.
 
 ## 11. Definition of Done
 

@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es-azure",
-  "version": "2.4.0-reactory.0",
+  "version": "2.5.0",
   "description": "Azure Storage distributed lock + queue providers for Workflow ES (Reactory fork)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
@@ -20,7 +20,7 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "@reactorynet/workflow-es": "^2.5.0",
     "inversify": "^6.0.0",
     "reflect-metadata": "^0.2.0"
   },

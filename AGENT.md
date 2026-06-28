@@ -11,7 +11,7 @@ exists to:
 - Extend the engine to integrate natively with the Reactory platform (service adapter, telemetry, event bus)
 
 Package name: `@reactorynet/workflow-es`  
-Current version: `2.3.6-reactory.2`  
+Current version: `2.5.0` (strict semver; the `-reactory.N` prerelease suffix has been dropped)  
 Branch: `chore/reactory-fork-init` (merge to `master` when stable)
 
 This is a **monorepo** containing:
@@ -106,7 +106,7 @@ reactory-workflow-es/
 | Concern | Upstream (v2.3.5) | Current fork | Target |
 |---|---|---|---|
 | Package name | `workflow-es` | `@reactorynet/workflow-es` | same |
-| Version | `2.3.5` | `2.3.6-reactory.2` | semver with `-reactory.N` pre-release |
+| Version | `2.3.5` | `2.5.0` | strict semver (no `-reactory.N` prerelease suffix) |
 | TypeScript | `^2.2.1` | `^5.0.0` | `^5.x` (keep current) |
 | TS target | `ES5` | `ES2020` | `ES2022` eventually |
 | `noImplicitAny` | `false` | `true` | `strict: true` (next) |
