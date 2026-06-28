@@ -67,6 +67,11 @@ export class SqlitePersistence implements IPersistenceProvider {
                 await this.sequelize.authenticate();
                 // WAL mode: durability + concurrent readers during a write.
                 // This pragma persists in the file header — safe to set on every open.
+                // P3.4 — SQLite is SINGLE-HOST only. WAL allows concurrent readers but still a single
+                // writer; multiple workflow hosts sharing one SQLite file serialize writes at the OS
+                // level and will surface "database is locked" under load. For multi-host deployments
+                // use PostgreSQL/MySQL with a distributed lock provider (Redis/Azure). SQLite has no
+                // cross-process distributed lock and must not be shared across hosts.
                 await this.sequelize.query("PRAGMA journal_mode=WAL;");
                 await this.sequelize.query("PRAGMA foreign_keys=ON;");
                 await this.sequelize.sync();

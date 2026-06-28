@@ -15,9 +15,15 @@ export class AzureLockManager implements IDistributedLockProvider {
         var self = this;
         this.blobService = createBlobService(connectionString);
         this.blobService.createContainerIfNotExists(this.containerId, (error: Error, result: BlobService.ContainerResult, response: ServiceResponse): void => {
-            //TODO: log
-            self.renewTimer = setInterval(this.renewLeases, 45000, self);
-        });    
+            if (error) {
+                // P4.2: surface the failure instead of swallowing it (was `//TODO: log`). Without the
+                // lock container, acquireLock cannot succeed — and we must NOT arm the renew timer for
+                // a manager that can never hold a lease (P1.1).
+                console.error(`[AzureLockManager] Failed to ensure lock container '${self.containerId}': ${(error && error.message) || error}`);
+                return;
+            }
+            self.renewTimer = setInterval(self.renewLeases, 45000, self);
+        });
     }
 
     public async acquireLock(id: string): Promise<boolean> {
@@ -81,7 +87,14 @@ export class AzureLockManager implements IDistributedLockProvider {
         for (let blobName in self.leases) {
             if (self.leases[blobName]) {
                 self.blobService.renewLease(self.containerId, blobName, self.leases[blobName], (error: Error, result: BlobService.LeaseResult, response: ServiceResponse): void => {
-                    //TODO: log
+                    // P1.4: on renew failure the lease is lost — drop the entry so the blob can be
+                    // re-acquired by another holder (mirrors the Redis lock manager's catch-delete).
+                    // Leaving a stale entry would let this node believe it still owns a lease another
+                    // node can now take.
+                    if (error || !response || !response.isSuccessful) {
+                        console.warn(`[AzureLockManager] Lease renewal failed for '${blobName}'; dropping the lease so it can be re-acquired.`);
+                        delete self.leases[blobName];
+                    }
                 });
             }
         }

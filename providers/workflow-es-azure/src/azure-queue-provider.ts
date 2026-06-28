@@ -30,6 +30,14 @@ export class AzureQueueProvider implements IQueueProvider {
         });
     }
 
+    // P1.5: this deletes the message immediately on receipt, so a crash mid-processing drops the
+    // dequeued id from the queue. This is NOT silently fixed here on purpose: a correct
+    // delete-after-success requires an ack/complete step on IQueueProvider (a cross-provider contract
+    // change — the Redis provider has the same gap: its RPOPLPUSH "processing" list is never drained
+    // back by a reaper). In practice the PollWorker is the durability backstop — getRunnableInstances()
+    // / getRunnableEvents() re-discover and re-queue work that was lost from the queue, since the
+    // underlying instance/event is still Runnable/unprocessed in persistence. Tracked as P1.5 (deferred,
+    // pending an IQueueProvider ack contract).
     public dequeueForProcessing(queue: any): Promise<string> {
         let queueName = this.getQueueName(queue);
         var self = this;
@@ -55,15 +63,16 @@ export class AzureQueueProvider implements IQueueProvider {
     }
 
     private getQueueName(queue: any): string {
-        let queueName = '';
         switch (queue) {
             case QueueType.Workflow:
-                queueName = this.workflowQueue;
-                break;
+                return this.workflowQueue;
             case QueueType.Event:
-                queueName = this.eventQueue;
-                break;
+                return this.eventQueue;
+            default:
+                // P2.5: fail loudly on an unknown QueueType instead of returning '' (which would
+                // silently send to / read from a non-existent queue). Matches the Redis provider's
+                // having an explicit default branch.
+                throw new Error(`AzureQueueProvider: unknown QueueType '${String(queue)}'`);
         }
-        return queueName;
     }
 }
