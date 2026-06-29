@@ -73,19 +73,19 @@ __metadata:
     typescript: "npm:^5.0.0"
   peerDependencies:
     "@opentelemetry/api": ">=1.0.0 <2.0.0"
-    "@reactorynet/workflow-es": ">=2.4.0-reactory.0"
+    "@reactorynet/workflow-es": ^2.5.0
     inversify: ^6.0.0
     reflect-metadata: ^0.2.0
   languageName: unknown
   linkType: soft
 
 "@reactorynet/workflow-es@file:../../core::locator=%40reactorynet%2Fworkflow-es-opentelemetry%40workspace%3A.":
-  version: 2.4.0-reactory.1
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=13f1d7&locator=%40reactorynet%2Fworkflow-es-opentelemetry%40workspace%3A."
+  version: 2.5.0
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=100c76&locator=%40reactorynet%2Fworkflow-es-opentelemetry%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/43f80283186e42f9ca434b45b5dd8855d8a0a6279852b791a580726ee30368083c941dda43c3df0a7e5714233c7486e05251acff03eb69e487737541084b40c9
+  checksum: 10c0/47e3e1f393f656ce5d05b457bc42e2340efff6bc8e33a3f62fd93b8ebb9be3fb4fad1f03c205f4563f8cb8134f9a42a223f97710ef52f1b66d4716a32c7e95b3
   languageName: node
   linkType: hard
 
