@@ -12,7 +12,7 @@ persisted as data, and resumed across restarts; long-running steps can sleep, wa
 branch, run in parallel, and compensate (Saga). Persistence, queueing and distributed locking are
 pluggable providers, so the same engine runs single-process on a laptop or across many nodes in a cluster.
 
-- **Current version:** `2.4.0-reactory.3`
+- **Current version:** `2.5.0` (strict semver — the `-reactory.N` prerelease suffix has been dropped)
 - **Status:** enterprise-hardening programme complete (see [Project status](#project-status)).
 - **Runtime:** Node.js 20 & 22 (CI matrix). TypeScript ≥ 5, ES2020 output, CommonJS.
 
@@ -66,7 +66,7 @@ yarn build:pack   # build + emit @reactorynet-workflow-es-<version>.tgz
 // consumer package.json
 {
   "dependencies": {
-    "@reactorynet/workflow-es": "file:../reactory-workflow-es/core/reactorynet-workflow-es-2.4.0-reactory.3.tgz"
+    "@reactorynet/workflow-es": "file:../reactory-workflow-es/core/reactorynet-workflow-es-2.5.0.tgz"
   }
 }
 ```

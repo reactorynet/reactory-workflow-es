@@ -33,6 +33,12 @@ export class PostgresPersistence implements IPersistenceProvider {
      * @param connectionString a postgres connection URI, e.g.
      *   `postgres://user:password@host:5432/database`
      * @param options additional Sequelize options (pool, schema, logging, ...)
+     *
+     * P2.3 — Connection pool: when `options.pool` is omitted, Sequelize defaults to a pool of
+     * max 5 connections **per host process**. In a multi-host deployment with a high
+     * `maxConcurrentWorkflows`, effective DB concurrency is silently capped by this pool, not by
+     * `maxConcurrentWorkflows`. Size the pool to your worker concurrency, e.g.:
+     *   `new PostgresPersistence(uri, { pool: { min: 2, max: 10, idle: 10000 } })`.
      */
     constructor(connectionString: string, options: any = {}) {
         this.sequelize = new Sequelize(connectionString, {

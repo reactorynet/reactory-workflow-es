@@ -50,7 +50,8 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             let step: WorkflowStepBase = def.steps.find(x => x.id == pointer.stepId);
             if (step) {
                 // M5 §6.4: count an existing retry attempt (does not change retry behaviour, that is H5).
-                if (pointer.retryCount && pointer.retryCount > 0) {
+                // P4.3: `pointer.retryCount > 0` alone is sufficient — undefined/0/negative are all falsy or fail the check.
+                if (pointer.retryCount > 0) {
                     this.safeMetric(() => this.metrics.incrementCounter(METRIC_NAMES.STEP_RETRIES, 1, {
                         [ATTR.WORKFLOW_DEFINITION_ID]: instance.workflowDefinitionId,
                         [ATTR.STEP_ID]: String(pointer.stepId),

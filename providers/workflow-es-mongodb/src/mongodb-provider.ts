@@ -116,6 +116,12 @@ export class MongoDBPersistence implements IPersistenceProvider {
      * WorkflowConcurrencyError (C1 contract).
      * On success, advances the in-memory token so the same instance can be
      * persisted again without a re-read.
+     *
+     * P3.3 — Atomicity of execution pointers: pointers are stored as an EMBEDDED array on the
+     * workflow document (not a separate collection). The single `$set` of the whole instance below
+     * therefore updates the workflow row and ALL its pointers atomically in one document write.
+     * Do NOT refactor pointer updates into a separate operation — that would break this atomicity
+     * and the optimistic-concurrency guarantee.
      */
     public async persistWorkflow(instance: WorkflowInstance): Promise<void> {
         const id = new ObjectId(instance.id);

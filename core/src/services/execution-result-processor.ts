@@ -4,6 +4,15 @@ import { WorkflowHost } from "./workflow-host";
 import { WorkflowInstance, ExecutionPointer, PointerStatus, ExecutionResult, WorkflowDefinition, StepExecutionContext, WorkflowStepBase, WorkflowStatus, ExecutionError, WorkflowErrorHandling, ExecutionPipelineDirective, WorkflowExecutorResult, EventSubscription } from "../models";
 const isNullOrUndefined = (val: any): val is null | undefined => val === null || val === undefined;
 
+// P0.5: order-independent set equality for scope arrays (string[]). Two pointers share a
+// scope when they contain the same element ids regardless of order. Replaces the previous
+// JSON.stringify comparison, which was order-dependent and silently fragile.
+const scopesEqual = (a: string[], b: string[]): boolean => {
+    const x = a || [];
+    const y = b || [];
+    return x.length === y.length && x.every(v => y.includes(v));
+};
+
 @injectable()
 export class ExecutionResultProcessor implements IExecutionResultProcessor {
     
@@ -52,7 +61,7 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
             pointer.status = PointerStatus.Complete;
             pointer.endTime = new Date();
             
-            for (let outcome of step.outcomes.filter(x => (x.value(instance.data) == stepResult.outcomeValue) || (x.value(instance.data) == null))) {
+            for (let outcome of step.outcomes.filter(x => (x.value(instance.data) === stepResult.outcomeValue) || (x.value(instance.data) == null))) {
                 let newPointer = this.pointerFactory.buildNextPointer(pointer, outcome);                
                 instance.executionPointers.push(newPointer);
             }
@@ -229,7 +238,7 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
             }
 
             if (revert) {
-                let prevSiblings = workflow.executionPointers.filter(x => JSON.stringify(pointer.scope) == JSON.stringify(x.scope) && x.id != pointer.id && x.status == PointerStatus.Complete);
+                let prevSiblings = workflow.executionPointers.filter(x => scopesEqual(pointer.scope, x.scope) && x.id != pointer.id && x.status == PointerStatus.Complete);
                 for (let siblingPointer of prevSiblings) {
                     let siblingStep = definition.steps.find(x => x.id == siblingPointer.stepId);
                     if (!isNullOrUndefined(siblingStep.compensationStepId)) {
@@ -254,7 +263,7 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
             let pointerId = scope.pop();
             let pointer = workflow.executionPointers.find(x => x.id == pointerId);
             let step = definition.steps.find(x => x.id == pointer.stepId);
-            if (step.revertChildrenAfterCompensation)
+            if (step.revertChildrenAfterCompensation())
                 return true;
             if ((step.compensationStepId !== undefined) && (step.compensationStepId !== null))
                 return true;

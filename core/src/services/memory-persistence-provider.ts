@@ -111,6 +111,10 @@ export class MemoryPersistenceProvider implements IPersistenceProvider {
             evt.isProcessed = false;
     }
 
+    // P3.2 — `eventKey` is matched with `===`. Event keys are expected to be primitives
+    // (string/number); two distinct OBJECT instances with identical contents will NOT match here,
+    // whereas the SQL/Mongo providers compare serialized forms. Consumers needing structured keys
+    // should stringify them (e.g. JSON.stringify) before publishing/subscribing so all providers agree.
     public async getEvents(tenantId: string, eventName: string, eventKey: unknown, asOf: Date): Promise<string[]> {
         return this.events
             .filter(x => x.tenantId === tenantId && x.eventName === eventName && x.eventKey === eventKey && x.eventTime >= asOf)

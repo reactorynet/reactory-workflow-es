@@ -203,7 +203,7 @@ export class EventQueueWorker implements IBackgroundWorker {
                 let workflow = await self.persistence.getWorkflowInstance(sub.workflowId);
                 // H6: decode the workflow payload after read before mutating/persisting.
                 await self.codecRunner.decodeInstance(workflow);
-                let pointers = workflow.executionPointers.filter(p => p.eventName == sub.eventName && p.eventKey == sub.eventKey && !p.eventPublished);
+                let pointers = workflow.executionPointers.filter(p => p.eventName === sub.eventName && p.eventKey === sub.eventKey && !p.eventPublished);
                 for (let p of pointers) {
                     p.eventData = evt.eventData;
                     p.eventPublished = true;

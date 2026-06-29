@@ -79,7 +79,11 @@ describe("structured-logging", () => {
             fake = new FakeLogger();
             persistence = new MemoryPersistenceProvider();
 
-            const config = configureWorkflow();
+            // P0.1 fix: a step that throws with no .onError() now correctly follows the default
+            // error path (retry budget → dead-letter) instead of the previous buggy "silently
+            // complete". Configure an immediate dead-letter (0 retries) so the throwing workflow
+            // reaches a terminal state quickly and this suite's spin-wait does not time out.
+            const config = configureWorkflow({ retry: { defaultMaxRetries: 0, defaultRetryIntervalMs: 10, stepNotFoundRetryIntervalMs: 10 } });
             config.useLogger(fake);
             config.usePersistence(persistence);
             const host = config.getHost();

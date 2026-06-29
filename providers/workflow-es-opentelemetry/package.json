@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es-opentelemetry",
-  "version": "1.0.0-reactory.0",
+  "version": "1.0.0",
   "description": "Optional OpenTelemetry metrics/tracing adapter for Workflow ES (Reactory fork)",
   "main": "./build/index.js",
   "typings": "./build/index.d.ts",
@@ -35,7 +35,7 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": ">=1.0.0 <2.0.0",
-    "@reactorynet/workflow-es": ">=2.4.0-reactory.0",
+    "@reactorynet/workflow-es": "^2.5.0",
     "inversify": "^6.0.0",
     "reflect-metadata": "^0.2.0"
   },

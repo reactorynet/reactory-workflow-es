@@ -59,6 +59,11 @@ export class WorkflowHost implements IWorkflowHost {
     // host can be stopped again.
     private stopPromise: Promise<void> | null = null;
 
+    // P4.1: true once stop()/performStop() has begun. publishEvent() refuses new
+    // events while shutting down (otherwise events accumulate in persistence and
+    // on the queue for a host that will never process them). Reset by start().
+    private shuttingDown: boolean = false;
+
     // H4: the exact handler references registered on `process`, stored so
     // stop() can removeListener the same functions (a fresh closure would be
     // a no-op and leak the listener). Also the "registered once" guard.
@@ -82,6 +87,7 @@ export class WorkflowHost implements IWorkflowHost {
 
         this.logger.log(LogLevel.Info, "Starting workflow host...");
         this.stopPromise = null;
+        this.shuttingDown = false;
 
         // Mark single-node providers as started so a second host start in the same
         // process can detect mistaken sharing of the dev-only in-memory providers.
@@ -128,6 +134,7 @@ export class WorkflowHost implements IWorkflowHost {
     }
 
     private async performStop(): Promise<void> {
+        this.shuttingDown = true;
         this.logger.log(LogLevel.Info, "Stopping workflow host...");
         this.removeCleanCallbacks();
         const timeoutMs = this.resolveGracefulShutdownTimeout();
@@ -191,7 +198,13 @@ export class WorkflowHost implements IWorkflowHost {
     }
 
     public async publishEvent(eventName: string, eventKey: string, eventData: any, eventTime: Date, tenantId: string = DEFAULT_TENANT): Promise<void> {
-        //todo: check host status
+        // P4.1: refuse new events once the host is shutting down — otherwise they are
+        // persisted and queued for a host whose workers are draining/stopped and will
+        // never process them. Logged at Warn so the dropped publish is visible.
+        if (this.shuttingDown) {
+            this.logger.log(LogLevel.Warn, "Cannot publish event — host is shutting down", { eventName, eventKey, tenantId });
+            return;
+        }
 
         this.logger.log(LogLevel.Info, "Publishing event", { eventName, eventKey });
 

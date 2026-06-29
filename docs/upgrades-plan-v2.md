@@ -9,6 +9,14 @@
 >
 > This cycle was produced by a **two-pass audit** (correctness review + security review) against the current codebase. Every
 > finding below is traceable to a specific file:line across both reviews.
+>
+> **⚠️ Verification pass (2026-06-27).** Every finding was re-checked against the actual code at its cited `file:line`. The audit
+> over-reported: of the 23 findings, **12 are valid**, **3 are partially valid** (real code, overstated or mislabeled claims),
+> and **8 are false positives or non-issues** — including several rated *Critical/High*. The headline corrections:
+> the Phase 0 "Critical" tier is the weakest part of the original audit; P1.2 is internally contradicted by P1.4; and the
+> proposed fixes for **P1.3** and **P2.4** would *introduce regressions* if implemented as written. See the **Verification
+> verdict** table below and the `✓/⚠/✗` line at the top of each §4 summary. `Status` and `Severity` columns in §3 have been
+> re-graded accordingly (`rejected` = verified false positive, retained for traceability; do not implement).
 
 ---
 
@@ -30,6 +38,7 @@
 | `ready` | Spec approved; ready to implement |
 | `wip` | Implementation in progress |
 | `done` | Merged and verified in CI |
+| `rejected` | Verified false positive in the 2026-06-27 pass; retained for traceability — **do not implement** |
 
 ### Owner tags (from `UPGRADES.md`)
 
@@ -72,58 +81,88 @@ and operability improvements.
 | Code review (core logic) | Critical → Low | C1–C4 (Critical), H1–H4 (High), M1–M4 (Medium), L1–L4 (Low) |
 | Security review (providers + concurrency) | HIGH → LOW | S1–S5 (HIGH), S6–S9 (MEDIUM), S10–S12 (LOW) |
 
+### Verification verdict (2026-06-27)
+
+`✓` valid · `⚠` partially valid (real code, claim corrected) · `✗` false positive / non-issue (do not implement).
+
+| ID | Verdict | One-line reason (corrected) |
+|---|---|---|
+| P0.1 | ⚠ | Real bug at `:257` (property access, always truthy). The `compensate` `:196` claim is **false** — it is correctly invoked with `()`. |
+| P0.2 | ✗ | `null` is an **intentional sentinel**, handled everywhere (`=== null`; queue worker guards `!== null`). `strictNullChecks` is off. "Produces NaN" is wrong (`null`→`0` in `<`); the cited comparison doesn't exist. Not Critical. |
+| P0.3 | ✗ | The loop at `:316` only runs for `children.length > 0`, so the empty-`.every()` branch is unreachable in normal operation. Stated "single-path" trigger is wrong. (Proposed `.some()` fix is also semantically wrong.) |
+| P0.4 | ⚠ | `==` is real at `:55` and `:206` (hardening). But `:206` is in `seedSubscription`, not `processEvent`; and site 3 (`:73`) is a **false positive** — `WorkflowErrorHandling` has no `0` value, so `!errorOption` is safe. |
+| P0.5 | ✓ | Order-dependent `JSON.stringify` compare confirmed at `:232`. Correctly self-described as fragile-but-safe-today (hardening). |
+| P1.1 | ⚠ | Race + swallowed error real. But "renew timer never starts on failure" is **false** — `setInterval` runs unconditionally inside the callback. |
+| P1.2 | ✗ | JS `Map.forEach`+`delete` is **well-defined**, not UB; callback is `async` so mutations occur after iteration; `delete` only on lease-loss (correct). Contradicts P1.4. |
+| P1.3 | ✗ | Duplicate-seed already prevented by per-sub `terminateSubscription` + `!eventPublished`. **Proposed "mark-first" fix is a regression** (drops delivery + retry). |
+| P1.4 | ✓ | Azure `renewLeases` ignores the error and keeps the stale entry — genuinely missing Redis's delete-on-failure cleanup. |
+| P1.5 | ✓ | Azure deletes the message immediately on dequeue (`:48`); Redis uses `rpoplpush` to a processing list (`:33`). Real crash-loss window. |
+| P2.1 | ✗ | No cross-tenant leak — isolation is enforced at the seed layer (`getSubscriptions(tenantId,…)`). A single elected poller polling all tenants is correct. Doc-only at most. |
+| P2.2 | ✗ | Two separate enums on separate fields; never compared interchangeably. No real ambiguity. |
+| P2.3 | ✓ | No explicit pool config; Sequelize default max=5 is real. Fair LOW operability note. |
+| P2.4 | ✗ | Escaping covers all metacharacters except the deliberate `*`; `+` **is** escaped. **Proposed fix (escaping `*`) would break wildcard matching.** |
+| P2.5 | ✓ | Azure `getQueueName` returns `''` for unknown type; Redis has a `default` (`:41`). Confirmed. |
+| P3.1 | ✓ | Deprecated `azure-storage` import confirmed. Corrections: it is **v2.10.7 not v1.x**; replacements are `@azure/storage-blob` + `@azure/storage-queue`. |
+| P3.2 | ✓ | `:116` uses `===` on `eventKey: any`. Mostly moot for primitive keys; LOW doc note is fair. |
+| P3.3 | ✓ | Pointers embedded; `$set` is atomic-but-undocumented. Doc-only. |
+| P3.4 | ✓ | `PRAGMA journal_mode=WAL` at `:70`; single-writer / multi-host contention is accurate. Doc note. |
+| P3.5 | ✗ | `getActiveIds()` already has the explanatory comment at `:63–67`. Essentially already satisfied. |
+| P4.1 | ✓ | `//todo: check host status` at `:194`; no guard. Real (note: host has no `shuttingDown` field yet — must be added). |
+| P4.2 | ✓ | Same swallowed error at `:17–18` (duplicate of P1.1's error aspect). |
+| P4.3 | ✓ | `retryCount && retryCount > 0` at `:53` is genuinely redundant. Trivial. |
+
 ### Phase 0 — Runtime correctness bugs (must-fix before anything else)
 
 | # | ID | Item | Target | Severity | Owner | Status | Spec |
 |---|----|------|--------|----------|-------|--------|------|
 | **Phase 0 — Silent incorrectness in core logic** |
-| 1 | P0.1 | Fix `revertChildrenAfterCompensation()` missing method invocation (`shouldCompensate`, `compensate`) | Both | Critical | `[claude]` | planned | [spec](docs/specs/p0.1-silent-compensation-break.md) |
-| 2 | P0.2 | Fix `nextExecution` assigned `null` on `number` type (dead-letter path) | Both | Critical | `[copilot]` | planned | — |
-| 3 | P0.3 | Fix `.every()` on empty set causing false loop entry in `determineNextExecutionTime` | Both | Critical | `[claude]` | planned | [spec](docs/specs/p0.3-empty-every.md) |
-| 4 | P0.4 | Fix loose equality across three comparison sites (`outcomeValue`, `eventKey`, `errorBehavior`) | Both | High | `[copilot+review]` | planned | [spec](docs/specs/p0.4-loose-equality.md) |
-| 5 | P0.5 | Replace `JSON.stringify(scope)` scope comparison with a deterministic, order-independent check | Both | High | `[claude]` | planned | [spec](docs/specs/p0.5-scope-comparison.md) |
+| 1 | P0.1 | ⚠ Fix `revertChildrenAfterCompensation` property access in `shouldCompensate` (`:257` only; `compensate` `:196` is already correct) | Both | High *(was Critical)* | `[claude]` | planned | [spec](docs/specs/p0.1-silent-compensation-break.md) |
+| 2 | P0.2 | ✗ ~~`nextExecution` assigned `null` on `number` type~~ — intentional sentinel; not a runtime bug | Both | ~~Critical~~ | `[copilot]` | rejected | — |
+| 3 | P0.3 | ✗ ~~`.every()` on empty set~~ — branch unreachable when `children.length > 0`; proposed `.some()` fix is wrong | Both | ~~Critical~~ | `[claude]` | rejected | [spec](docs/specs/p0.3-empty-every.md) |
+| 4 | P0.4 | ⚠ Fix loose equality at `outcomeValue` (`:55`) and `eventKey` (`:206`, in `seedSubscription`); `errorBehavior` (`:73`) is a false positive | Both | Medium *(was High)* | `[copilot+review]` | planned | [spec](docs/specs/p0.4-loose-equality.md) |
+| 5 | P0.5 | ✓ Replace `JSON.stringify(scope)` compare with order-independent check (hardening; safe today) | Both | Medium *(was High)* | `[claude]` | planned | [spec](docs/specs/p0.5-scope-comparison.md) |
 
 ### Phase 1 — Data integrity & race windows (security review findings)
 
 | # | ID | Item | Target | Severity | Owner | Status | Spec |
 |---|----|------|--------|----------|-------|--------|------|
 | **Phase 1 — Race conditions and data loss windows** |
-| 6 | P1.1 | Fix Azure lock manager: constructor → `acquireLock` race + unhandled container creation error | Cloud | HIGH | `[claude]` | planned | [spec](docs/specs/p1.1-azure-lock-race.md) |
-| 7 | P1.2 | Fix Redis lease renewal `forEach-delete` race (undefined behaviour) | Cloud | HIGH | `[copilot+review]` | planned | — |
-| 8 | P1.3 | Fix event processing atomicity: mark processed before or per-subscription, not after loop | Both | HIGH | `[claude]` | planned | [spec](docs/specs/p1.3-event-processed-atomicity.md) |
-| 9 | P1.4 | Fix Azure `renewLeases`: delete stale entries on renew failure (match Redis pattern) | Cloud | HIGH | `[copilot+review]` | planned | — |
-| 10 | P1.5 | Add pending queue / dead-letter to Azure queue provider (prevent message loss on crash) | Cloud | MEDIUM | `[claude]` | planned | [spec](docs/specs/p1.5-azure-queue-deadletter.md) |
+| 6 | P1.1 | ⚠ Fix Azure lock manager: constructor → `acquireLock` race + swallowed container-creation error (note: timer *does* start on failure) | Cloud | HIGH | `[claude]` | planned | [spec](docs/specs/p1.1-azure-lock-race.md) |
+| 7 | P1.2 | ✗ ~~Redis lease renewal `forEach-delete` race~~ — JS `Map.forEach`+`delete` is well-defined; contradicts P1.4 | Cloud | ~~HIGH~~ | `[copilot+review]` | rejected | — |
+| 8 | P1.3 | ✗ ~~Event processed-atomicity~~ — already idempotent (`terminateSubscription` + `!eventPublished`); **proposed fix is a regression** | Both | ~~HIGH~~ | `[claude]` | rejected | [spec](docs/specs/p1.3-event-processed-atomicity.md) |
+| 9 | P1.4 | ✓ Fix Azure `renewLeases`: delete stale entries on renew failure (match Redis pattern) | Cloud | HIGH | `[copilot+review]` | planned | — |
+| 10 | P1.5 | ✓ Add pending/visibility-timeout to Azure queue provider (prevent message loss on crash) | Cloud | MEDIUM | `[claude]` | planned | [spec](docs/specs/p1.5-azure-queue-deadletter.md) |
 
 ### Phase 2 — Correctness hardening & edge cases
 
 | # | ID | Item | Target | Severity | Owner | Status | Spec |
 |---|----|------|--------|----------|-------|--------|------|
 | **Phase 2 — Non-critical but important correctness issues** |
-| 11 | P2.1 | Fix poll worker: no tenant-awareness for event polling (cross-tenant window) | Cloud | HIGH | `[claude]` | planned | [spec](docs/specs/p2.1-poll-tenant-aware.md) |
-| 12 | P2.2 | Fix status zero collision (`PointerStatus.Legacy == WorkflowStatus.Runnable`) — document or resolve default | Both | MEDIUM | `[copilot]` | planned | — |
-| 13 | P2.3 | Document connection pool defaults + add a recommended config note in the PostgreSQL provider JSDoc | Cloud | LOW | `[copilot+review]` | planned | — |
-| 14 | P2.4 | Fix wildcard regex edge cases in memory and MongoDB search filters (M9 query) | Both | MEDIUM | `[copilot+review]` | planned | [spec](docs/specs/p2.4-wildcard-regex.md) |
-| 15 | P2.5 | Add missing queue type default in Azure switch statement; log error on unknown `QueueType` | Cloud | LOW | `[copilot]` | planned | — |
+| 11 | P2.1 | ✗ ~~Poll worker cross-tenant window~~ — no leak (isolation at seed layer). Optional: comment that all-tenant polling is intentional | Cloud | LOW *(was HIGH)* | `[claude]` | rejected | [spec](docs/specs/p2.1-poll-tenant-aware.md) |
+| 12 | P2.2 | ✗ ~~Status zero collision~~ — separate enums on separate fields; never compared interchangeably | Both | ~~MEDIUM~~ | `[copilot]` | rejected | — |
+| 13 | P2.3 | ✓ Document connection pool defaults + recommended config note in the PostgreSQL provider JSDoc | Cloud | LOW | `[copilot+review]` | planned | — |
+| 14 | P2.4 | ✗ ~~Wildcard regex edge cases~~ — escaping already complete; **proposed fix (escaping `*`) breaks wildcards** | Both | ~~MEDIUM~~ | `[copilot+review]` | rejected | [spec](docs/specs/p2.4-wildcard-regex.md) |
+| 15 | P2.5 | ✓ Add missing queue type default in Azure switch statement; throw/log on unknown `QueueType` | Cloud | LOW | `[copilot]` | planned | — |
 
 ### Phase 3 — Provider hygiene & operability polish
 
 | # | ID | Item | Target | Severity | Owner | Status | Spec |
 |---|----|------|--------|----------|-------|--------|------|
 | **Phase 3 — Dependency updates and documentation** |
-| 16 | P3.1 | Audit Azure storage SDK deprecation (`azure-storage` v1 → `@azure/storage-queues`) + migrate if feasible | Cloud | MEDIUM | `[claude]` | planned | [spec](docs/specs/p3.1-azure-sdk-upgrade.md) |
-| 17 | P3.2 | EventKey reference comparison in-memory provider — document the limitation, provide guidance for users | Both | LOW | `[copilot+review]` | planned | — |
-| 18 | P3.3 | MongoDB `persistWorkflow`: verify and document pointer update atomicity with `$set` on parent doc | Cloud | LOW | `[copilot+review]` | planned | — |
-| 19 | P3.4 | Document SQLite multi-host write contention limitation in WAL mode (single writer) | Both | LOW | `[copilot]` | planned | — |
-| 20 | P3.5 | Add `getActiveIds()` to PollWorker (return empty array; health/operability) | Both | LOW | `[copilot]` | planned | — |
+| 16 | P3.1 | ✓ Audit Azure storage SDK deprecation (`azure-storage` **v2.10.7** → `@azure/storage-blob` + `@azure/storage-queue`) + migrate if feasible | Cloud | MEDIUM | `[claude]` | planned | [spec](docs/specs/p3.1-azure-sdk-upgrade.md) |
+| 17 | P3.2 | ✓ EventKey reference comparison in-memory provider — document the limitation, provide guidance for users | Both | LOW | `[copilot+review]` | planned | — |
+| 18 | P3.3 | ✓ MongoDB `persistWorkflow`: verify and document pointer update atomicity with `$set` on parent doc | Cloud | LOW | `[copilot+review]` | planned | — |
+| 19 | P3.4 | ✓ Document SQLite multi-host write contention limitation in WAL mode (single writer) | Both | LOW | `[copilot]` | planned | — |
+| 20 | P3.5 | ✗ ~~Add `getActiveIds()` comment~~ — explanatory comment already exists at `poll-worker.ts:63–67` | Both | ~~LOW~~ | `[copilot]` | rejected | — |
 
 ### Phase 4 — Observability & logging fixes
 
 | # | ID | Item | Target | Severity | Owner | Status | Spec |
 |---|----|------|--------|----------|-------|--------|------|
 | **Phase 4 — Error reporting and diagnostics** |
-| 21 | P4.1 | Remove unreachable `//todo: check host status` in `publishEvent`; add shutdown guard to prevent event accumulation | Both | MEDIUM | `[copilot+review]` | planned | [spec](docs/specs/p4.1-publish-shutdown-guard.md) |
-| 22 | P4.2 | Document Azure lock manager constructor error swallowing (`//TODO: log`) as a known issue + fix the callback | Cloud | LOW | `[copilot+review]` | planned | — |
-| 23 | P4.3 | Audit and document `retryCount && retryCount > 0` redundancy in workflow-executor | Both | LOW | `[copilot]` | planned | — |
+| 21 | P4.1 | ✓ Remove `//todo: check host status` in `publishEvent`; add shutdown guard (requires adding a `shuttingDown` field to `WorkflowHost`) | Both | MEDIUM | `[copilot+review]` | planned | [spec](docs/specs/p4.1-publish-shutdown-guard.md) |
+| 22 | P4.2 | ✓ Fix Azure lock manager constructor error swallowing (`//TODO: log`) — log + surface readiness | Cloud | LOW | `[copilot+review]` | planned | — |
+| 23 | P4.3 | ✓ Simplify redundant `retryCount && retryCount > 0` in workflow-executor (`:53`) | Both | LOW | `[copilot]` | planned | — |
 
 ---
 
@@ -137,13 +176,19 @@ as the complete specification.
 
 #### P0.1 — Silent compensation break: `revertChildrenAfterCompensation()` called as property access `[claude]`
 
-- **Problem.** In `shouldCompensate` (execution-result-processor.ts:257) and `compensate` (line 196),
-  `step.revertChildrenAfterCompensation` is accessed as a property instead of invoked as a method. The function reference is
-  always truthy, so the condition always evaluates to `true`. In `shouldCompensate`, every step with a non-null
-  `compensationStepId` returns `true` regardless of the step's actual intent. In `compensate`, both branches of the `||`
-  evaluate using the parent's values unconditionally — the conditional logic is completely bypassed.
+- **⚠ Verdict (verified).** Partially valid. The bug at `:257` is **real**; the claim about `compensate` `:196` is a **false positive**.
 
-- **Affected surface.** `core/src/services/execution-result-processor.ts:257, 196`. Affects all saga compensation scenarios.
+- **Problem.** In `shouldCompensate` (execution-result-processor.ts:257), `step.revertChildrenAfterCompensation` is accessed as
+  a *property* instead of invoked: `if (step.revertChildrenAfterCompensation) return true;`. The method reference is always
+  truthy, so `shouldCompensate` returns `true` for *every* step (it never even reaches the `compensationStepId` check on the
+  next line). Effect: `handleStepException` selects `Compensate` as the default error strategy for any step lacking an explicit
+  `errorBehavior`. The intended code is `step.revertChildrenAfterCompensation()` (base→`false`, `SagaContainer`→`true`).
+  **Correction:** the audit also flagged `compensate` line 196, but lines 196–198 already invoke
+  `parentStep.resumeChildrenAfterCompensation()` / `revertChildrenAfterCompensation()` *with* `()` — they are correct. Do **not**
+  touch them (adding `()` there would be a no-op or a syntax error).
+
+- **Affected surface.** `core/src/services/execution-result-processor.ts:257` (only). Affects the default-error-strategy path
+  for non-saga steps with no `errorBehavior`.
 
 - **Acceptance.** `shouldCompensate` correctly invokes both `revertChildrenAfterCompensation()` and
   `resumeChildrenAfterCompensation()`. Compensation logic only runs when the step's methods return `true`. Existing scenario
@@ -153,45 +198,67 @@ as the complete specification.
 
 #### P0.2 — `nextExecution` assigned `null` on `number` type `[copilot]`
 
-- **Problem.** `WorkflowInstance.nextExecution` is typed `number`. In two locations, `null` is assigned: `deadLetterMissingDefinition` (workflow-executor.ts:234) and `determineNextExecutionTime` initialisation (line 297). This violates the type invariant and creates ambiguity — does `null` mean "never run" or "uninitialized"? Downstream comparisons (`pointer.sleepUntil < instance.nextExecution`) produce `NaN` when comparing against `null`.
+- **✗ Verdict (verified).** False positive — not a runtime bug, and not Critical.
 
-- **Affected surface.** `core/src/services/workflow-executor.ts:234, 297`.
+- **Problem (as filed).** `WorkflowInstance.nextExecution` is typed `number` but `null` is assigned at workflow-executor.ts:234
+  and :297; claimed to produce `NaN` in `pointer.sleepUntil < instance.nextExecution`.
 
-- **Acceptance.** All assignments use a distinct sentinel (e.g. `-1`) or the field is split into two fields. No type errors
-  under `strictNullChecks`. Comparisons handle the sentinel explicitly.
+- **Correction.** `null` is the **intended sentinel** for "next-execution not yet determined this pass," and the code handles it
+  consistently: `determineNextExecutionTime` branches on `=== null` (`:315`, `:329`) and `workflow-queue-worker.ts:208` guards
+  `instance.nextExecution !== null` *before* comparing. `core/tsconfig.json` has `strictNullChecks` **off**, so assigning `null`
+  to a `number` field is not even a type error. The "produces NaN" claim is wrong on two counts: `null` coerces to `0` in `<`
+  comparisons (not `NaN`), and the cited comparison `pointer.sleepUntil < instance.nextExecution` does not exist anywhere in the
+  codebase. (Minor, separate: `memory-persistence-provider.ts:61` does not guard `null`, but `null<now`→`0<now`→true means at
+  worst a benign re-poll, not the claimed harm.) **Do not implement** as a Critical fix; optionally just widen the type to
+  `number | null` for documentation.
+
+- **Affected surface.** `core/src/services/workflow-executor.ts:234, 297` (sentinel assignment — working as designed).
 
 - **Depends on.** none.
 
 #### P0.3 — `.every()` on empty set in `determineNextExecutionTime` causes false loop entry `[claude]`
 
-- **Problem.** In `determineNextExecutionTime` (workflow-executor.ts:318), the expression
-  `instance.executionPointers.filter(x => x.scope.includes(pointer.id)).every(x => !!x.endTime)` returns `true` when no pointers
-  match the filter, because `[].every(fn) === true`. This negates to `false`, causing the loop body to execute even though
-  there are zero children. In normal single-path workflows (where most pointers have empty scopes), this leads to unnecessary
-  recomputation and potentially incorrect `nextExecution` values.
+- **✗ Verdict (verified).** False positive — unreachable in normal operation, mischaracterized trigger, and the proposed fix is wrong.
 
-- **Affected surface.** `core/src/services/workflow-executor.ts:318`.
+- **Problem (as filed).** `[].every(fn) === true` at workflow-executor.ts:318 supposedly causes "false loop entry" for
+  "normal single-path workflows where most pointers have empty scopes."
 
-- **Acceptance.** The dual-pass logic in `determineNextExecutionTime` produces correct `nextExecution` for both single-path
-  and multi-pointer workflows. No unnecessary computation on empty sets.
+- **Correction.** The `[].every()===true` JS fact is true, but the enclosing loop (`:316`) iterates only pointers with
+  `children.length > 0`. Single-path pointers have `children.length == 0` and are handled by the **first** loop (`:307`) — they
+  never reach `:318`. For a pointer that *does* have children, the children were created with that pointer's id in their
+  `scope`, so the filter is non-empty; the empty-set branch is therefore unreachable in any consistent state. Severity is not
+  Critical. **Also:** the spec's recommended fix (replace `.every()` with negated `.some()`) is semantically wrong — it would
+  change "proceed only when *all* children ended" into "proceed when *any* child ended" and break multi-child scheduling. If any
+  hardening is wanted at all, add an explicit `if (scopeChildren.length === 0) continue;` guard — nothing more.
+
+- **Affected surface.** `core/src/services/workflow-executor.ts:318` (defensive only; no observed defect).
 
 - **Depends on.** none.
 
 #### P0.4 — Loose equality across three comparison sites `[copilot+review]`
 
-- **Problem.** Three locations use `==` (loose equality) where `===` (strict) is appropriate:
-  1. `outcomeValue` matching in `processExecutionResult` (execution-result-processor.ts:55): `1 == true`, `"0" == 0`.
-  2. `eventKey` comparison in `EventQueueWorker.processEvent` (event-queue-worker.ts:206): string/number confusion.
-  3. `errorBehavior` falsy check in `handleStepException` (execution-result-processor.ts:73): `!0 === true`.
+- **⚠ Verdict (verified).** Two of three sites valid (as hardening); site 3 is a false positive.
 
-- **Affected surface.** `core/src/services/execution-result-processor.ts:55, 73`; `core/src/services/event-queue-worker.ts:206`.
+- **Problem.** Loose equality (`==`) at:
+  1. ✓ `outcomeValue` matching in `processExecutionResult` (execution-result-processor.ts:55) — `==` confirmed. Tighten the
+     `== stepResult.outcomeValue` half to `===`; **keep** `== null` (intentional null-or-undefined catch).
+  2. ✓ `eventKey`/`eventName` comparison (event-queue-worker.ts:206) — `==` confirmed. **Correction:** this is in
+     `seedSubscription`, *not* `processEvent` as filed. Low-risk (keys are strings in practice); a defensible hardening.
+  3. ✗ **False positive.** `errorBehavior` "falsy check" at execution-result-processor.ts:73 is `if (!errorOption)`, not loose
+     equality, and `WorkflowErrorHandling = {Retry:1, Suspend:2, Terminate:3, Compensate:4}` has **no `0` value** — so no valid
+     enum member is falsy and `!errorOption` correctly means "unset." Do **not** change this site.
 
-- **Acceptance.** All three sites use `===` (or explicit null-checks where the intent is "undefined or null"). No type coercion
-  surprises. Outcome matching tests confirm strict equality.
+- **Affected surface.** `core/src/services/execution-result-processor.ts:55`; `core/src/services/event-queue-worker.ts:206`.
+
+- **Acceptance.** Sites 1 and 2 use `===` (preserving the intentional `== null`). Site 3 is left as-is. Outcome-matching tests
+  confirm strict equality.
 
 - **Depends on.** none.
 
 #### P0.5 — Scope comparison via `JSON.stringify` is order-dependent and fragile `[claude]`
+
+- **✓ Verdict (verified).** Valid as a hardening item (not an active bug — the spec correctly says it is safe today). Severity
+  downgraded High → Medium.
 
 - **Problem.** In `compensate` (execution-result-processor.ts:232), scope arrays are compared using
   `JSON.stringify(pointer.scope) == JSON.stringify(x.scope)`. Two logically equivalent scopes `[A, B]` vs `[B, A]` produce
@@ -210,11 +277,14 @@ as the complete specification.
 
 #### P1.1 — Azure lock manager: constructor → `acquireLock` race + unhandled container creation error `[claude]`
 
+- **⚠ Verdict (verified).** Valid core (race + swallowed error), but one sub-claim is wrong.
+
 - **Problem.** `AzureLockManager`'s constructor fires an async `createContainerIfNotExists` call via callback, but does not
-  await it before returning. If `acquireLock()` or other public methods are called before the container exists, they fail
-  silently. The error callback has `//TODO: log` — errors are swallowed entirely. If container creation fails (e.g., access
-  denied), the renew timer never starts; locks can be acquired but never renewed, and old leases silently expire with no
-  cleanup.
+  await it before returning. If `acquireLock()` is called before the container exists, `createBlob` fails and `acquireLock`
+  returns `false` (a spurious "lock held elsewhere" at startup). The error callback has `//TODO: log` (`:18`) — errors are
+  swallowed entirely. **Correction:** the audit claimed "the renew timer never starts" on container-creation failure — that is
+  false. `self.renewTimer = setInterval(...)` is on `:19` *unconditionally inside the callback*, so it starts on success **and**
+  on error. The genuine improvement is therefore the readiness gate + logging, plus starting the timer *only on success*.
 
 - **Affected surface.** `providers/workflow-es-azure/src/azure-lock-manager.ts:14-20`.
 
@@ -225,32 +295,44 @@ as the complete specification.
 
 #### P1.2 — Redis lease renewal `forEach-delete` race `[copilot+review]`
 
-- **Problem.** In `renewLeases` (redis-lock-manager.ts:67), `Map.delete()` is called inside `.forEach()`. Deleting an entry that
-  has not yet been visited in the iteration is undefined behaviour — it can silently skip renewal of locks still held by other
-  nodes.
+- **✗ Verdict (verified).** False positive — and internally contradicted by P1.4.
 
-- **Affected surface.** `providers/workflow-es-redis/src/redis-lock-manager.ts:67`.
+- **Problem (as filed).** `Map.delete()` inside `.forEach()` in `renewLeases` (redis-lock-manager.ts:67) is "undefined
+  behaviour" that skips renewals.
 
-- **Acceptance.** Lease renewal snapshots entries first: `Array.from(this.leases).forEach(...)`. Renewal is never skipped for a
-  lease that exists at the start of the timer tick.
+- **Correction.** JavaScript `Map.prototype.forEach` with `delete` is **well-defined** by spec — it is not C++/Java
+  iterator-invalidation. Two further reasons it is a non-issue: (a) the callback is `async`, so the `set`/`delete` run in
+  microtasks *after* the synchronous `forEach` finishes iterating; (b) the `delete` only fires in the `catch` (lease lost), which
+  is the *correct* cleanup. P1.4 explicitly holds up this exact delete-on-failure pattern as the model Azure should copy, so
+  calling it a bug here is contradictory. The suggested `Array.from(...)` snapshot is harmless but unnecessary. **Do not implement.**
+
+- **Affected surface.** `providers/workflow-es-redis/src/redis-lock-manager.ts:67` (working as designed).
 
 - **Depends on.** none.
 
 #### P1.3 — Event processing atomicity: mark processed before or per-subscription, not after loop `[claude]`
 
-- **Problem.** In `event-queue-worker.ts:175-179`, `markEventProcessed` is called *after* all subscription seeding completes. If
-  a node crashes between seeding the last subscription and marking the event as processed, another node will read the same event
-  again and seed the same subscriptions a second time — violating the at-most-once guarantee for event seeding.
+- **✗ Verdict (verified).** False positive — already idempotent. ⚠️ **The proposed fix would introduce a regression — do not implement.**
 
-- **Affected surface.** `core/src/services/event-queue-worker.ts:175-179`.
+- **Problem (as filed).** `markEventProcessed` is called after the seed loop (`:178-179`), so a crash mid-loop lets another node
+  re-read the event and re-seed subscriptions, violating at-most-once.
 
-- **Acceptance.** Each subscription is marked as seeded before processing the next (or the event is marked processed before
-  starting the seed loop). A crash at any point in the seed sequence does not cause re-seeding. Integration test proves no
-  duplicate seeds under crash simulation.
+- **Correction.** Re-seeding is already prevented by two existing mechanisms: (a) each successful `seedSubscription` calls
+  `terminateSubscription(sub.id)` (`:217`), so a re-read's `getSubscriptions` no longer returns already-seeded subs — this is a
+  per-subscription checkpoint that makes a crash *resumable* without duplication; and (b) the pointer filter `!p.eventPublished`
+  (`:206`) prevents publishing the same pointer twice. The audit's own acceptance ("mark each subscription seeded before the
+  next") is *already implemented* via `terminateSubscription`. Worse, the spec's prescribed fix — `markEventProcessed`
+  *unconditionally before* the loop — would **drop delivery**: a subscription that was transiently locked or errored would never
+  be retried (the event is already marked processed), turning today's correct at-least-once-with-idempotency into lossy
+  best-effort. Keep the current ordering.
+
+- **Affected surface.** `core/src/services/event-queue-worker.ts:175-179` (working as designed).
 
 - **Depends on.** none.
 
 #### P1.4 — Azure `renewLeases`: delete stale entries on renew failure `[copilot+review]`
+
+- **✓ Verdict (verified).** Valid. The `renewLease` callback at `:83-85` is `//TODO: log` and never deletes on failure — confirmed.
 
 - **Problem.** When a renewal fails in the Azure lock manager (line 79-87), the code does nothing — the lock is silently lost
   but the entry remains in `self.leases`. A subsequent `acquireLock` on the same blob could succeed while the old logical holder
@@ -264,6 +346,10 @@ as the complete specification.
 - **Depends on.** none.
 
 #### P1.5 — Azure queue: add pending queue / dead-letter to prevent message loss `[claude]`
+
+- **✓ Verdict (verified).** Valid. Confirmed: `dequeueForProcessing` calls `deleteMessage` immediately (`:48`) before processing;
+  Redis uses `rpoplpush` into a processing list (`redis-queue-provider.ts:33`). Note: a complete fix likely needs an explicit
+  ack/complete step (today `dequeueForProcessing` returns the id and the caller never signals completion).
 
 - **Problem.** The Azure queue provider (azure-queue-provider.ts) deletes messages immediately upon receipt. If the processing
   node crashes mid-execution, the message is permanently lost. Redis uses `rpoplpush` which provides a pending queue that
@@ -280,31 +366,39 @@ as the complete specification.
 
 #### P2.1 — Poll worker: no tenant-awareness for event polling → cross-tenant window `[claude]`
 
-- **Problem.** The poll worker calls `getRunnableEvents()` without a tenantId, which (per the persistence contract) returns events
-  across ALL tenants. This creates a window where non-tenant-scoped events can be queued before the subscription seed checks
-  tenant isolation — specifically, if an event arrives from tenant A and another from tenant B simultaneously, they may be
-  interleaved in processing order before per-tenant locks serialize them.
+- **✗ Verdict (verified).** False positive — there is no cross-tenant window. Severity downgraded HIGH → LOW (optional doc only).
 
-- **Affected surface.** `core/src/services/poll-worker.ts:138`.
+- **Problem (as filed).** Poll worker calls `getRunnableEvents()` without a tenantId (`:138`), opening a "cross-tenant window."
 
-- **Acceptance.** Poll worker passes a tenantId (or iterates tenants) to `getRunnableEvents()`, or the persistence layer handles
-  tenant-scoped polling natively. Cross-tenant event ordering is documented as acceptable (serialized by per-event locks).
+- **Correction.** No cross-tenant leakage occurs. Each event carries its own `tenantId`; `processEvent` reads it and matches
+  subscriptions tenant-scoped via `getSubscriptions(tenantId, …)`, and `seedSubscription` locks/operates under `sub.tenantId`.
+  The poll worker is a *single elected poller* (one node holds `POLL_LEASE_KEY`), so polling all tenants is the correct design —
+  partitioning it per-tenant would be wrong. Cross-tenant *ordering* on the queue is irrelevant to correctness. (FYI the
+  persistence contract *already* exposes `getRunnableEvents(tenantId?)`, so no interface work is needed even if per-tenant
+  polling were ever wanted.) At most, add a one-line comment that all-tenant polling is intentional.
+
+- **Affected surface.** `core/src/services/poll-worker.ts:138` (working as designed).
 
 - **Depends on.** none.
 
 #### P2.2 — Status zero collision: `PointerStatus.Legacy == WorkflowStatus.Runnable` `[copilot]`
 
-- **Problem.** Both `PointerStatus.Legacy` and `WorkflowStatus.Runnable` equal `0`. If a pointer's status is deserialized or
-  persisted as `0`, it's ambiguous which enum it belongs to. Should be resolved via explicit default matching or documented.
+- **✗ Verdict (verified).** False positive / non-issue.
 
-- **Affected surface.** `core/src/models/execution-pointer.ts:22`; `core/src/models/workflow-status.ts:2`.
+- **Problem (as filed).** `PointerStatus.Legacy` and `WorkflowStatus.Runnable` both equal `0`, creating ambiguity.
 
-- **Acceptance.** The zero collision is either resolved (e.g., `PointerStatus.Legacy` renamed to `Unknown`) or documented in
-  the model as an intentional alias with a clear migration path. Code uses explicit enum references, not bare numbers.
+- **Correction.** These are two independent enums applied to two different fields — `ExecutionPointer.status` is always read as
+  `PointerStatus`, `WorkflowInstance.status` always as `WorkflowStatus`. There is no code path where a value crosses between
+  them, so there is no actual ambiguity. (The cited `execution-pointer.ts:22` is the `status: number = 0` default; the enum
+  itself is at `:25-35`.) No change required. If desired purely for readability, renaming `Legacy`→`Unknown` is cosmetic.
+
+- **Affected surface.** `core/src/models/execution-pointer.ts`; `core/src/models/workflow-status.ts` (no defect).
 
 - **Depends on.** none.
 
 #### P2.3 — Document connection pool defaults in PostgreSQL provider JSDoc `[copilot+review]`
+
+- **✓ Verdict (verified).** Valid. Confirmed: constructor (`:37-43`) spreads `...options` with no explicit pool config; Sequelize's default pool max is 5.
 
 - **Problem.** The PostgreSQL constructor passes `...options` to Sequelize without documenting recommended pool settings. Without
   explicit `max`/`min` pool settings, Sequelize defaults to a pool of 5 connections per host. In a multi-host deployment with
@@ -319,20 +413,26 @@ as the complete specification.
 
 #### P2.4 — Wildcard regex edge cases in memory and MongoDB search filters `[copilot+review]`
 
-- **Problem.** The `escapeRegex` helper in both `memory-persistence-provider.ts:263` and `mongodb-provider.ts:468` escapes
-  metacharacters, but the character class `[\\]` handling may not cover all edge cases. If user input contains characters that
-  become special regex syntax after replacement (e.g., `+` followed by another character), edge cases could produce unintended
-  patterns.
+- **✗ Verdict (verified).** False positive — the escaping is already complete. ⚠️ **The spec's proposed fix would break wildcards — do not implement.**
 
-- **Affected surface.** `core/src/services/memory-persistence-provider.ts:263`; `providers/workflow-es-mongodb/src/mongodb-provider.ts:468`.
+- **Problem (as filed).** The `escapeRegex` helpers "may not cover all edge cases," e.g. `+` could produce unintended patterns.
 
-- **Acceptance.** Both providers use identical, well-tested regex escaping. A test exists that passes a string containing every
-  common metacharacter and verifies no injection occurs. The implementation is reviewed against the full set of ECMAScript
-  regex metacharacters.
+- **Correction.** Both helpers use `/[.+?^${}()|[\]\\]/g` → `\\$&`, which escapes **every** ECMAScript metacharacter *except* `*`
+  (deliberately left as the wildcard, converted to `.*`). `+` **is** escaped; the named concern does not occur. The MongoDB
+  `workflowDefinitionId` wildcard path (`:427-434`) escapes per-segment and joins with `.*` — also correct. Critically, the
+  spec's recommended escape function escapes `*` too — applying that to the memory provider's `wildcardMatch` would make the
+  subsequent `*`→`.*` step a no-op and **break wildcard matching entirely**. The only real (minor, *unfiled*) nuance: Mongo's
+  `searchTerm` path (`:456`) feeds `escapeRegex` output straight into a regex, so a literal `*` in a *search term* acts as a
+  quantifier, whereas the memory provider's `searchTerm` uses a literal `indexOf` (`:251-254`). That is a small cross-provider
+  inconsistency worth at most a doc note — not the metacharacter-coverage bug described.
+
+- **Affected surface.** `core/src/services/memory-persistence-provider.ts:263`; `providers/workflow-es-mongodb/src/mongodb-provider.ts:468` (escaping correct as-is).
 
 - **Depends on.** none.
 
 #### P2.5 — Missing queue type default in Azure switch statement `[copilot]`
+
+- **✓ Verdict (verified).** Valid. Confirmed: Azure `getQueueName` (`:57-68`) has no `default` and returns `''`; Redis has a `default` (`redis-queue-provider.ts:41`).
 
 - **Problem.** The `getQueueName` switch (azure-queue-provider.ts:57-68) returns an empty string for any unknown `QueueType`,
   silently sending/receiving from a non-existent queue. The Redis provider has a `default` case; Azure does not.
@@ -347,17 +447,24 @@ as the complete specification.
 
 #### P3.1 — Audit Azure storage SDK deprecation + migrate if feasible `[claude]`
 
-- **Problem.** The legacy `azure-storage` package (v1.x) is no longer maintained and does not support modern Azure AD
-  authentication or managed identities. This is a supply-chain / dependency risk.
+- **✓ Verdict (verified).** Valid, with two factual corrections.
 
-- **Affected surface.** `providers/workflow-es-azure/`.
+- **Problem.** The `azure-storage` package is deprecated (Microsoft superseded it with the modular `@azure/storage-*` SDKs); it
+  uses callback APIs and lacks modern Azure AD / managed-identity auth — a dependency/maintenance risk. **Corrections:** (1) the
+  pinned version is `^2.10.7` (**v2.x**, the package's final release), not "v1.x" as filed; (2) the replacement is **not** a
+  single `@azure/storage-queues` package — the lock manager uses Blob leases (needs `@azure/storage-blob`) and the queue
+  provider uses queues (needs `@azure/storage-queue`, singular).
 
-- **Acceptance.** Decision documented: either migrated to `@azure/storage-queues` (v12+) with full parity, or formally
-  deprecated with a migration guide for consumers. Either way, the README banners the decision.
+- **Affected surface.** `providers/workflow-es-azure/` (`azure-lock-manager.ts` → blob; `azure-queue-provider.ts` → queue).
+
+- **Acceptance.** Decision documented: either migrated to `@azure/storage-blob` + `@azure/storage-queue` (v12+) with full parity,
+  or formally deprecated with a migration guide for consumers. Either way, the README banners the decision.
 
 - **Depends on.** none.
 
 #### P3.2 — EventKey reference comparison in-memory provider limitation `[copilot+review]`
+
+- **✓ Verdict (verified).** Valid but minor. Confirmed `===` at `:116` (in `getEvents`); `eventKey` is typed `any`. Mostly moot for primitive keys; doc-only.
 
 - **Problem.** In `memory-persistence-provider.ts:116`, event key comparison uses `===`. Two different object instances with
   identical content will not match. Sequelize and MongoDB handle this correctly by comparing serialized forms, but the memory
@@ -372,6 +479,8 @@ as the complete specification.
 
 #### P3.3 — MongoDB `persistWorkflow`: verify pointer update atomicity with `$set` on parent doc `[copilot+review]`
 
+- **✓ Verdict (verified).** Valid (doc-only). Confirmed: `persistWorkflow` (`:120-144`) spreads the instance and `$set`s the whole document, so embedded pointers update atomically — correct but undocumented.
+
 - **Problem.** Execution pointers are stored as embedded array elements within the workflow document in MongoDB. The `$set` on
   the outer document updates them atomically, which is correct for MongoDB. However, this is implicit and undocumented — a
   future refactor could accidentally split pointer updates into a separate operation.
@@ -384,6 +493,8 @@ as the complete specification.
 - **Depends on.** none.
 
 #### P3.4 — Document SQLite multi-host write contention limitation in WAL mode `[copilot]`
+
+- **✓ Verdict (verified).** Valid (doc-only). Confirmed `PRAGMA journal_mode=WAL` at `sqlite-provider.ts:70`; WAL is single-writer.
 
 - **Problem.** WAL mode enables concurrent readers but single writer. Multiple workflow hosts sharing the same SQLite file will
   serialize writes at the OS level; under heavy load, this manifests as "database is locked" errors. The singleton lock provider
@@ -398,14 +509,15 @@ as the complete specification.
 
 #### P3.5 — Add `getActiveIds()` to PollWorker `[copiot]`
 
-- **Problem.** `PollWorker.getActiveCount()` exists (via H1), but `getActiveIds()` returns an empty array without a comment
-  explaining why. For health/status reporting, it would be useful to know which poll cycles are active. Returning `[]` is fine
-  (poll ticks don't have item identity) but should be documented.
+- **✗ Verdict (verified).** False positive — already satisfied.
 
-- **Affected surface.** `core/src/services/poll-worker.ts:72`.
+- **Problem (as filed).** `getActiveIds()` returns `[]` "without a comment explaining why."
 
-- **Acceptance.** `getActiveIds()` returns `[]` with a comment explaining that poll ticks are anonymous. Health reporting uses
-  the count from `getActiveCount()`. No behavioral change.
+- **Correction.** The explanatory comment already exists at `poll-worker.ts:63-67`: *"…ticks have no item identity, so IDs are
+  empty."* It sits on the `getActiveCount`/`getActiveIds` block. Nothing to do (at most, copy the sentence directly above
+  `getActiveIds` for emphasis).
+
+- **Affected surface.** `core/src/services/poll-worker.ts:72` (already documented at `:63-67`).
 
 - **Depends on.** none.
 
@@ -413,10 +525,15 @@ as the complete specification.
 
 #### P4.1 — Remove unreachable `//todo: check host status` in `publishEvent`; add shutdown guard `[copilot+review]`
 
+- **✓ Verdict (verified).** Valid, with an implementation caveat.
+
 - **Problem.** In `workflow-host.ts:194`, the comment says `//todo: check host status` but nothing is checked. Events are
   published to persistence and queued even after `stop()` is called, causing events to accumulate silently on a stopped host.
+  **Caveat:** `WorkflowHost` has **no `shuttingDown` field** today — only `stopPromise` (set in `stop()`/`performStop()`). The
+  guard must therefore *introduce* a `shuttingDown` boolean (set true in `performStop`, reset in `start`) or check
+  `this.stopPromise !== null`. The worker classes' `shuttingDown` flags are not visible from the host.
 
-- **Affected surface.** `core/src/services/workflow-host.ts:193-218`.
+- **Affected surface.** `core/src/services/workflow-host.ts:193-218` (+ a new shutdown flag).
 
 - **Acceptance.** `publishEvent` checks `shuttingDown` (or equivalent) before accepting new events. A warning is logged when
   publishing to a stopped host. The TODO comment is removed.
@@ -424,6 +541,8 @@ as the complete specification.
 - **Depends on.** none.
 
 #### P4.2 — Document Azure lock manager constructor error swallowing `[copilot+review]`
+
+- **✓ Verdict (verified).** Valid. Confirmed `//TODO: log` at `:18` (the call is on `:17`); the error parameter is ignored. Same root issue as P1.1.
 
 - **Problem.** `azure-lock-manager.ts:17`: `//TODO: log` — the container creation callback's error parameter is ignored. If
   creation fails (access denied, network unreachable), all subsequent operations silently fail with no diagnostic.
@@ -436,6 +555,8 @@ as the complete specification.
 - **Depends on.** P1.1 (if that spec also covers this).
 
 #### P4.3 — Audit and document `retryCount && retryCount > 0` redundancy `[copilot]`
+
+- **✓ Verdict (verified).** Valid (trivial). Confirmed at `:53`; the `&&` left operand is redundant. Note it only guards a metrics counter increment, so there is no behavioral impact.
 
 - **Problem.** In `workflow-executor.ts:53`, `pointer.retryCount && pointer.retryCount > 0` is redundant — the first check always
   evaluates the same as the second when `retryCount` defaults to `0`. If `retryCount` were ever `undefined` (e.g., deserialized
@@ -480,8 +601,14 @@ Most P0 items are independent (no dependencies). P1–P4 items generally don't d
 | P3.2–P3.5 | none |
 | P4.1–P4.3 | none (P4.2 depends on P1.1 if both cover constructor errors) |
 
-**Recommended execution order:** All P0 first (critical correctness), then P1 (race conditions), then P2 (hardening), then
-P3/P4 (hygiene). P1 items can be done in parallel since they touch different providers or distinct code paths.
+**Recommended execution order (post-verification, 2026-06-27):** The original "all P0 first" ordering assumed five Critical/High
+Phase 0 bugs. After verification only **P0.1 (`:257`)** is a real correctness bug — do that first. Then the genuinely-valid
+provider fixes **P1.4, P1.5, P2.5, P4.1/P4.2** (Azure-heavy; can run in parallel as they touch distinct code paths). Then the
+hardening/cleanup items **P0.4 (sites 1–2), P0.5, P4.3**. Then the documentation items **P2.3, P3.1, P3.2, P3.3, P3.4**.
+
+**Do not implement (verified false positives):** P0.2, P0.3, P1.2, P1.3, P2.1, P2.2, P2.4, P3.5. Two of these ship *harmful*
+proposed fixes — **P1.3** (drops event delivery/retry) and **P2.4** (breaks wildcard matching) — and **P0.3**'s suggested
+`.some()` rewrite is also wrong. These rows are retained with status `rejected` for traceability only.
 
 ---
 
