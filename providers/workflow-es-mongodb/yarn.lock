@@ -74,18 +74,18 @@ __metadata:
     reflect-metadata: "npm:^0.2.0"
     typescript: "npm:^5.0.0"
   peerDependencies:
-    "@reactorynet/workflow-es": ">=2.4.0-reactory.0"
+    "@reactorynet/workflow-es": ^2.5.0
     reflect-metadata: ^0.2.0
   languageName: unknown
   linkType: soft
 
 "@reactorynet/workflow-es@file:../../core::locator=%40reactorynet%2Fworkflow-es-mongodb%40workspace%3A.":
-  version: 2.4.0-reactory.4
-  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=cdcf50&locator=%40reactorynet%2Fworkflow-es-mongodb%40workspace%3A."
+  version: 2.5.0
+  resolution: "@reactorynet/workflow-es@file:../../core#../../core::hash=f1c578&locator=%40reactorynet%2Fworkflow-es-mongodb%40workspace%3A."
   dependencies:
     inversify: "npm:^6.0.0"
     reflect-metadata: "npm:^0.2.0"
-  checksum: 10c0/4b55622b508429bf47bed822fe6184845190a5374e7cef67677611759c5ee772190d6c9a25ada2326cc82f3382cb68af2f04023f8ad006e9fee6b40c04c02a35
+  checksum: 10c0/0a5916f891ecd630370838517598f5e6e352d4480c65f8a144f6f5a2547f3edbdd0e7ade521b7e022ace3f20d0896e0434a536341b2bded6b27d6db99bf0d3b7
   languageName: node
   linkType: hard
 
