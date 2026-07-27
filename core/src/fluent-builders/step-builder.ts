@@ -78,12 +78,12 @@ export class StepBuilder<TStepBody extends StepBody, TData> {
         return outcomeBuilder;
     }
 
-    public input(expression: (step: TStepBody, data: TData) => void): StepBuilder<TStepBody, TData> {
+    public input(expression: (step: TStepBody, data: TData, context?: StepExecutionContext) => void): StepBuilder<TStepBody, TData> {
         this.step.inputs.push(expression);
         return this;
     }
 
-    public output(expression: (step: TStepBody, data: TData) => void): StepBuilder<TStepBody, TData> {
+    public output(expression: (step: TStepBody, data: TData, context?: StepExecutionContext) => void): StepBuilder<TStepBody, TData> {
         this.step.outputs.push(expression);
         return this;
     }
@@ -137,10 +137,10 @@ export class StepBuilder<TStepBody extends StepBody, TData> {
         return null;
     }
 
-    public foreach(expression: (data :TData) => any[]): StepBuilder<Foreach, TData> {
+    public foreach(expression: (data :TData, item?: any) => any[]): StepBuilder<Foreach, TData> {
         let newStep = new WorkflowStep<Foreach>();
         newStep.body = Foreach;
-        newStep.inputs.push((step: Foreach, data: any) => step.collection = expression(data));
+        newStep.inputs.push((step: Foreach, data: any, context?: StepExecutionContext) => step.collection = expression(data, context?.item));
         this.workflowBuilder.addStep(newStep);
         
         let stepBuilder = new StepBuilder<Foreach, TData>(this.workflowBuilder, newStep);
@@ -152,10 +152,10 @@ export class StepBuilder<TStepBody extends StepBody, TData> {
         return stepBuilder;
     }
 
-    public while(expression: (data :TData) => boolean): StepBuilder<While, TData> {
+    public while(expression: (data :TData, item?: any) => boolean): StepBuilder<While, TData> {
         let newStep = new WorkflowStep<While>();
         newStep.body = While;
-        newStep.inputs.push((step: While, data: any) => step.condition = expression(data));
+        newStep.inputs.push((step: While, data: any, context?: StepExecutionContext) => step.condition = expression(data, context?.item));
         this.workflowBuilder.addStep(newStep);
         
         let stepBuilder = new StepBuilder<While, TData>(this.workflowBuilder, newStep);
@@ -167,10 +167,10 @@ export class StepBuilder<TStepBody extends StepBody, TData> {
         return stepBuilder;
     }
 
-    public if(expression: (data :TData) => boolean): StepBuilder<If, TData> {
+    public if(expression: (data :TData, item?: any) => boolean): StepBuilder<If, TData> {
         let newStep = new WorkflowStep<If>();
         newStep.body = If;
-        newStep.inputs.push((step: If, data: any) => step.condition = expression(data));
+        newStep.inputs.push((step: If, data: any, context?: StepExecutionContext) => step.condition = expression(data, context?.item));
         this.workflowBuilder.addStep(newStep);
         
         let stepBuilder = new StepBuilder<If, TData>(this.workflowBuilder, newStep);
