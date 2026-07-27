@@ -127,6 +127,46 @@ are in [`samples/node.js/typescript/`](samples/node.js/typescript) and the guide
 > Note: the sample files predate the rename and still `import … from "workflow-es"`; use
 > `@reactorynet/workflow-es` (and the scoped provider names) in new code.
 
+### Item-aware mappers inside `foreach`
+
+`.input()` and `.output()` mappers receive an optional third argument — the `StepExecutionContext`
+for that pointer — so a multi-step `foreach` body can read the current iteration's item instead of
+racing every branch into one shared `data` slot:
+
+```ts
+builder
+  .startWith(Init)
+  .foreach(data => data.orders)
+    .do(then => then
+      .startWith(FetchOrderDetail)
+        .output((step, data, ctx) => {
+          data.detail = data.detail || {};
+          data.detail[ctx.item] = step.result;   // keyed by item, not overwritten by other branches
+        })
+      .then(ChargeCard)
+        .input((step, data, ctx) => step.amount = data.detail[ctx.item].total)
+    );
+```
+
+`.if()`, `.while()` and a nested `.foreach()` accept the enclosing item as an optional second
+expression argument:
+
+```ts
+.foreach(data => data.orders)
+  .do(then => then
+    .if((data, item) => item.status !== "archived")
+      .do(ifThen => ifThen.startWith(ProcessOrder))
+  );
+```
+
+Two-parameter `(step, data)` / `(data)` mappers and expressions keep compiling and behaving exactly
+as before — the third/second argument is additive.
+
+Caveat: a step immediately inside `.if().do(...)` or `.while().do(...)` does **not** see the outer
+`foreach` item on its own `context.item` (it is `null` there — a pre-existing property of how `if`/
+`while` branch their body, unrelated to `foreach`). Correlate via `ctx.pointer.id` /
+`ctx.pointer.predecessorId` from a mapper on the `if`/`while` step itself if the body needs it.
+
 ---
 
 ## Configuration

@@ -83,7 +83,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
 
                     //inputs
                     for (let input of step.inputs) {
-                        input(body, instance.data);
+                        input(body, instance.data, stepContext);
                     }
                     
                     switch (step.beforeExecute(result, stepContext, pointer, body)) {
@@ -125,7 +125,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
 
                     //outputs
                     for (let output of step.outputs) {
-                        output(body, instance.data);
+                        output(body, instance.data, stepContext);
                     }
 
                     this.resultProcessor.processExecutionResult(stepResult, pointer, instance, step, result);

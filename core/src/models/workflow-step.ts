@@ -20,8 +20,8 @@ export abstract class WorkflowStepBase {
     public maxRetries? : number;        // undefined => fall back to definition / WorkflowOptions.retry.defaultMaxRetries
     public compensationStepId : number;
 
-    public inputs: Array<(step: StepBody, data: any) => void> = [];
-    public outputs: Array<(step: StepBody, data: any) => void> = [];
+    public inputs: Array<(step: StepBody, data: any, context?: StepExecutionContext) => void> = [];
+    public outputs: Array<(step: StepBody, data: any, context?: StepExecutionContext) => void> = [];
 
     public initForExecution(executorResult: WorkflowExecutorResult, definition: WorkflowDefinition, workflow: WorkflowInstance, executionPointer: ExecutionPointer): any {
         return ExecutionPipelineDirective.Next;

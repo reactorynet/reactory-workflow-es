@@ -92,6 +92,7 @@ and operability improvements.
 | P0.3 | ✗ | The loop at `:316` only runs for `children.length > 0`, so the empty-`.every()` branch is unreachable in normal operation. Stated "single-path" trigger is wrong. (Proposed `.some()` fix is also semantically wrong.) |
 | P0.4 | ⚠ | `==` is real at `:55` and `:206` (hardening). But `:206` is in `seedSubscription`, not `processEvent`; and site 3 (`:73`) is a **false positive** — `WorkflowErrorHandling` has no `0` value, so `!errorOption` is safe. |
 | P0.5 | ✓ | Order-dependent `JSON.stringify` compare confirmed at `:232`. Correctly self-described as fragile-but-safe-today (hardening). |
+| P0.6 | ✓ | *(post-audit, 2026-07-27 — not part of the 23-finding count above.)* Verified at all cited sites: `workflow-executor.ts:86,:128` pass only `instance.data` to mappers while `:79` sets `stepContext.item`; `workflow-step.ts:23-24` types mappers with two params; `step-builder.ts:143,:158,:173` bind `.foreach`/`.while`/`.if` expressions against `data` alone. Silent wrong results in any foreach body of ≥2 steps. Inherited from upstream. |
 | P1.1 | ⚠ | Race + swallowed error real. But "renew timer never starts on failure" is **false** — `setInterval` runs unconditionally inside the callback. |
 | P1.2 | ✗ | JS `Map.forEach`+`delete` is **well-defined**, not UB; callback is `async` so mutations occur after iteration; `delete` only on lease-loss (correct). Contradicts P1.4. |
 | P1.3 | ✗ | Duplicate-seed already prevented by per-sub `terminateSubscription` + `!eventPublished`. **Proposed "mark-first" fix is a regression** (drops delivery + retry). |
@@ -121,6 +122,13 @@ and operability improvements.
 | 3 | P0.3 | ✗ ~~`.every()` on empty set~~ — branch unreachable when `children.length > 0`; proposed `.some()` fix is wrong | Both | ~~Critical~~ | `[claude]` | rejected | [spec](docs/specs/p0.3-empty-every.md) |
 | 4 | P0.4 | ⚠ Fix loose equality at `outcomeValue` (`:55`) and `eventKey` (`:206`, in `seedSubscription`); `errorBehavior` (`:73`) is a false positive | Both | Medium *(was High)* | `[copilot+review]` | planned | [spec](docs/specs/p0.4-loose-equality.md) |
 | 5 | P0.5 | ✓ Replace `JSON.stringify(scope)` compare with order-independent check (hardening; safe today) | Both | Medium *(was High)* | `[claude]` | planned | [spec](docs/specs/p0.5-scope-comparison.md) |
+| 24 | P0.6 | ✓ Foreach body steps have no per-iteration data isolation — mappers cannot see `contextItem`, `.output()` races into one shared sink *(post-audit, 2026-07-27)* | Both | High | `[claude]` | spec | [spec](docs/specs/p0.6-foreach-scope-isolation.md) |
+
+> **P0.6 is a post-audit addition** (2026-07-27), found while assessing the engine's suitability for
+> data-movement workloads. It is not part of the original 23-finding audit and is therefore excluded
+> from the verification-pass counts in the header. It was verified directly against the cited
+> `file:line` before being recorded. Numbered `24` to keep the roadmap ordinal sequence unique;
+> its execution position is **within Phase 0, after P0.1**.
 
 ### Phase 1 — Data integrity & race windows (security review findings)
 
@@ -272,6 +280,35 @@ as the complete specification.
   verifies two pointers with the same elements in different orders compare equal.
 
 - **Depends on.** none.
+
+#### P0.6 — Foreach body steps have no per-iteration data isolation `[claude]`
+
+- **✓ Verdict (verified 2026-07-27).** Valid. **Post-audit addition** — not part of the original 23-finding count. Every cited
+  site was read directly before recording. Inherited from upstream `danielgerlag/workflow-es`, not introduced by this fork.
+
+- **Problem.** `Foreach` correctly stamps each collection element onto its child pointer
+  (`execution-pointer-factory.ts:40`, `result.contextItem = branch`) and the executor correctly exposes it to the step body
+  (`workflow-executor.ts:79`, `stepContext.item = pointer.contextItem`). But the **input/output mappers never receive it** —
+  `workflow-executor.ts:86` calls `input(body, instance.data)` and `:128` calls `output(body, instance.data)`, and the mapper
+  contract itself is only two parameters (`models/workflow-step.ts:23-24`). Three consequences, all silent: (a) `.if()`,
+  `.while()` and nested `.foreach()` bind their expressions against `instance.data` alone (`step-builder.ts:173`, `:158`,
+  `:143`), so a predicate or nested collection **cannot reference the current item**; (b) every iteration's `.output()` writes
+  into the same `instance.data`, and because the executor snapshots all active pointers once per pass
+  (`workflow-executor.ts:39`) the body advances **lockstep breadth-first** — all N copies of step 1 run and overwrite each other
+  before any copy of step 2 runs, so step 2 of item #1 reads item #N's output; (c) the defect is invisible for single-step
+  bodies, which is the shape of every existing foreach test and sample. Net: a multi-step foreach body produces **silently
+  wrong results** with no error raised.
+
+- **Affected surface.** `core/src/services/workflow-executor.ts:86,:128` · `core/src/models/workflow-step.ts:23-24` ·
+  `core/src/fluent-builders/step-builder.ts:81,:86,:143,:158,:173`.
+
+- **Acceptance.** Mappers receive the executing `StepExecutionContext` as an optional third argument; `.if()`/`.while()`/
+  `.foreach()` expressions receive the enclosing item as an optional second argument; a three-item, two-step foreach body
+  yields three distinct per-item results rather than three copies of the last. Existing two-parameter mappers are unchanged
+  and no existing spec file is modified. No provider or at-rest change. MINOR bump (`2.5.0` → `2.6.0`).
+
+- **Depends on.** none. Blocks the corresponding YamlFlow `stepResults` collision fix in `reactory-express-server`, which
+  cannot be done correctly until this lands.
 
 ### Phase 1 — Data integrity & race windows
 
