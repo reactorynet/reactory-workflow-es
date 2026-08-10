@@ -15,12 +15,12 @@
     "mongodb"
   ],
   "author": {
-    "email": "daniel@gerlag.ca",
-    "name": "Daniel Gerlag"
+    "email": "werner.weber@gmail.com",
+    "name": "Werner Weber"
   },
   "license": "MIT",
   "devDependencies": {
-    "@reactorynet/workflow-es": "file:../../core",
+    "@reactorynet/workflow-es": "2.6.0",
     "@types/jasmine": "^4.6.0",
     "@types/node": "^20.0.0",
     "jasmine": "^5.0.0",
@@ -29,7 +29,7 @@
     "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "@reactorynet/workflow-es": "^2.5.0",
+    "@reactorynet/workflow-es": "2.6.0",
     "reflect-metadata": "^0.2.0"
   },
   "dependencies": {
