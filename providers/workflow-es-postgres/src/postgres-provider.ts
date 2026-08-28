@@ -82,6 +82,7 @@ export class PostgresPersistence implements IPersistenceProvider {
                     data: instance.data,
                     createTime: instance.createTime,
                     completeTime: instance.completeTime,
+                    definitionFingerprint: instance.definitionFingerprint,
                     concurrencyToken: expected + 1
                 } as any,
                 { where: { id: instance.id, concurrencyToken: expected }, transaction }
@@ -419,6 +420,9 @@ export class PostgresPersistence implements IPersistenceProvider {
         instance.createTime = model.createTime;
         instance.completeTime = model.completeTime;
         instance.concurrencyToken = model.concurrencyToken ?? 0;
+        // M10 — normalise SQL NULL to undefined so the executor's "absent => exempt"
+        // rule sees the same shape as memory/mongo.
+        instance.definitionFingerprint = model.definitionFingerprint ?? undefined;
         instance.executionPointers = (model.executionPointers || []).map(
             (pointer) => this.toExecutionPointer(pointer)
         );

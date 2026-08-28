@@ -97,6 +97,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 instance.status = WorkflowStatus.Runnable;
                 instance.nextExecution = 0;
                 instance.data = { step: "init" };
+                instance.definitionFingerprint = "0123456789abcdef0123456789abcdef";
                 returnedId = await provider.createNewWorkflow(instance);
             });
 
@@ -117,6 +118,28 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 expect(loaded.status).toEqual(WorkflowStatus.Runnable);
                 expect(loaded.nextExecution).toEqual(0);
                 expect(loaded.data).toEqual({ step: "init" });
+            });
+
+            // M10 — the fingerprint pins an instance to the graph it started on. A
+            // provider that drops it silently disables the guarantee for every instance
+            // it stores, so round-tripping it is part of the contract.
+            it("round-trips definitionFingerprint (M10)", async () => {
+                const loaded = await provider.getWorkflowInstance(returnedId);
+                expect(loaded.definitionFingerprint).toEqual("0123456789abcdef0123456789abcdef");
+            });
+
+            // M10 — pre-M10 rows carry no fingerprint and MUST stay exempt. A provider
+            // that materialises null/"" as something else would dead-letter legacy work.
+            it("round-trips an ABSENT definitionFingerprint as falsy, never as a value (M10)", async () => {
+                const legacy = new WorkflowInstance();
+                legacy.workflowDefinitionId = "conf-wf-1-legacy";
+                legacy.version = 1;
+                legacy.status = WorkflowStatus.Runnable;
+                legacy.nextExecution = 0;
+                legacy.data = {};
+                const legacyId = await provider.createNewWorkflow(legacy);
+                const loaded = await provider.getWorkflowInstance(legacyId);
+                expect(loaded.definitionFingerprint).toBeFalsy();
             });
         });
 

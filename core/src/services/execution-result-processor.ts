@@ -173,7 +173,8 @@ export class ExecutionResultProcessor implements IExecutionResultProcessor {
             retryCount: pointer.retryCount,
             maxRetries: maxRetries,
             errorMessage: lastError && lastError.message ? lastError.message : null,
-            deadLetteredAt: new Date().toISOString()
+            deadLetteredAt: new Date().toISOString(),
+            reason: "retries-exhausted"
         };
 
         this.logger.log(LogLevel.Error, "Workflow dead-lettered", { workflowId: workflow.id, stepId: String(pointer.stepId), retryCount: pointer.retryCount, maxRetries, tenantId: workflow.tenantId });

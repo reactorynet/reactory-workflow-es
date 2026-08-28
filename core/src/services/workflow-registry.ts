@@ -30,7 +30,9 @@ export class WorkflowRegistry implements IWorkflowRegistry {
         entry.version = workflow.version;
         const builder = new WorkflowBuilder<TData>();
         workflow.build(builder);
-        entry.defintion = builder.build(workflow.id, workflow.version);
+        // M10 — the seed (when the workflow supplies one) is folded into the definition
+        // fingerprint so a content-only edit to a generated workflow is still detected.
+        entry.defintion = builder.build(workflow.id, workflow.version, workflow.fingerprintSeed);
         this.registry.push(entry);
     }
 }

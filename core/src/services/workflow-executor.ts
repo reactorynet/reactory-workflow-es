@@ -46,6 +46,25 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             return result;
         }
 
+        // M10 — the registered definition resolved, but is it the SAME GRAPH this
+        // instance started on? Pointers address steps by ordinal index, so a definition
+        // edited without a version bump silently remaps every suspended pointer.
+        if (this.isDefinitionFingerprintMismatch(instance, def)) {
+            if (this.options.definitionFingerprintMode === "enforce") {
+                this.deadLetterChangedDefinition(instance, def, result);
+                return result;
+            }
+            // "warn": execute anyway, but make the hazard loud and attributable.
+            this.logger.log(LogLevel.Error, "Workflow definition changed under a running instance — executing anyway (definitionFingerprintMode=warn)", {
+                workflowId: instance.id,
+                workflowDefinitionId: instance.workflowDefinitionId,
+                version: instance.version,
+                startedFingerprint: instance.definitionFingerprint,
+                registeredFingerprint: def.fingerprint,
+                tenantId: instance.tenantId,
+            });
+        }
+
         for (let pointer of exePointers) {
             let step: WorkflowStepBase = def.steps.find(x => x.id == pointer.stepId);
             if (step) {
@@ -180,6 +199,96 @@ export class WorkflowExecutor implements IWorkflowExecutor {
     }
 
     /**
+     * M10 — Does this instance's pinned fingerprint disagree with the registered graph?
+     *
+     * Returns false (no mismatch) whenever the comparison cannot be made:
+     *  - mode is "off";
+     *  - the instance carries no fingerprint — it was started before fingerprinting
+     *    existed, and such instances MUST keep running (spec M10 §6.3);
+     *  - the definition carries no fingerprint — it was built by an older
+     *    `WorkflowBuilder.build(id, version)` overload.
+     *
+     * Only two present-and-differing values count as a mismatch. Treating an absent
+     * value as a mismatch would dead-letter every legacy instance on upgrade.
+     */
+    private isDefinitionFingerprintMismatch(instance: WorkflowInstance, def: WorkflowDefinition): boolean {
+        if (this.options.definitionFingerprintMode === "off") return false;
+        if (!instance.definitionFingerprint) return false;
+        if (!def.fingerprint) return false;
+        return instance.definitionFingerprint !== def.fingerprint;
+    }
+
+    /**
+     * M10 — Dead-letter an instance whose definition graph changed underneath it.
+     *
+     * Not retryable: re-running would reproduce the mismatch every cycle, and the
+     * remedy is an operator action (restore the graph, or publish the edit under a new
+     * version). Mirrors `deadLetterMissingDefinition` — same terminal states, same
+     * single `workflow.dead-lettered` lifecycle event — because to an operator this is
+     * the same class of failure: the definition this instance needs is not available.
+     */
+    private deadLetterChangedDefinition(instance: WorkflowInstance, def: WorkflowDefinition, result: WorkflowExecutorResult): void {
+        const message =
+            `Workflow definition changed under a running instance: ` +
+            `definitionId="${instance.workflowDefinitionId}", version=${instance.version}. ` +
+            `The instance was started on definition fingerprint "${instance.definitionFingerprint}" but the ` +
+            `registered definition now fingerprints as "${def.fingerprint}". Execution pointers reference steps ` +
+            `by ordinal position, so resuming would execute a different step than the one this instance suspended ` +
+            `at. This means the workflow was edited without a version bump (for YAML workflows, the catalog file ` +
+            `at <nameSpace>/<name>/<version>/ was overwritten in place). To fix: publish the edit under a NEW ` +
+            `version and leave the old version registered, so in-flight instances finish on the graph they started on.`;
+
+        this.logger.log(LogLevel.Error, "Dead-lettering workflow — definition graph changed under a running instance", {
+            workflowId: instance.id,
+            workflowDefinitionId: instance.workflowDefinitionId,
+            version: instance.version,
+            startedFingerprint: instance.definitionFingerprint,
+            registeredFingerprint: def.fingerprint,
+            tenantId: instance.tenantId,
+        });
+
+        const perr = new ExecutionError();
+        perr.message = message;
+        perr.errorTime = new Date();
+        result.errors.push(perr);
+
+        const pointer = instance.executionPointers.find(p => p.active) || instance.executionPointers[0];
+        let stepId = -1;
+        if (pointer) {
+            pointer.active = false;
+            pointer.status = PointerStatus.DeadLettered;
+            if (!pointer.endTime) pointer.endTime = new Date();
+            if (!pointer.persistenceData) pointer.persistenceData = {};
+            if (!Array.isArray(pointer.persistenceData._errors)) pointer.persistenceData._errors = [];
+            pointer.persistenceData._errors.push({
+                message,
+                stack: null,
+                errorTime: new Date().toISOString(),
+                retryCount: pointer.retryCount || 0,
+            });
+            stepId = pointer.stepId;
+        }
+
+        instance.status = WorkflowStatus.DeadLettered;
+        instance.nextExecution = null;
+
+        const evt: WorkflowDeadLetteredEvent = {
+            event: WORKFLOW_DEAD_LETTERED as "workflow.dead-lettered",
+            workflowId: instance.id,
+            workflowDefinitionId: instance.workflowDefinitionId,
+            version: instance.version,
+            pointerId: pointer ? pointer.id : "",
+            stepId,
+            retryCount: pointer ? (pointer.retryCount || 0) : 0,
+            maxRetries: 0, // a changed definition is not retryable
+            errorMessage: message,
+            deadLetteredAt: new Date().toISOString(),
+            reason: "definition-changed",
+        };
+        this.lifecycle.emit(evt);
+    }
+
+    /**
      * M1 — Dead-letter an instance whose (workflowDefinitionId, version) is not registered.
      *
      * Called when `tryGetDefinition` returns `undefined` at load time. This is NOT a
@@ -246,6 +355,7 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             maxRetries: 0, // missing-definition is not retryable (M1 spec §6.5)
             errorMessage: message,
             deadLetteredAt: new Date().toISOString(),
+            reason: "definition-not-registered",
         };
         this.lifecycle.emit(evt);
     }
@@ -277,7 +387,8 @@ export class WorkflowExecutor implements IWorkflowExecutor {
             retryCount: pointer.retryCount,
             maxRetries: maxRetries,
             errorMessage: lastError && lastError.message ? lastError.message : null,
-            deadLetteredAt: new Date().toISOString()
+            deadLetteredAt: new Date().toISOString(),
+            reason: "step-not-found"
         };
 
         this.logger.log(LogLevel.Error, "Workflow dead-lettered", { workflowId: workflow.id, stepId: String(pointer.stepId), retryCount: pointer.retryCount, maxRetries, tenantId: workflow.tenantId });

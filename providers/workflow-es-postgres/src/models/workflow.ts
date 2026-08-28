@@ -70,6 +70,12 @@ export class Workflow extends Model {
     @Column(DataType.INTEGER)
     concurrencyToken: number;
 
+    // M10 — fingerprint of the definition graph the instance was STARTED on. Nullable
+    // by design: rows written before M10 carry NULL and are exempt from the check, so
+    // the column needs no backfill and no default.
+    @Column(DataType.STRING)
+    definitionFingerprint: string;
+
     @HasMany(() => ExecutionPointer)
     executionPointers: ExecutionPointer[];
 }

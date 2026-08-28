@@ -21,6 +21,17 @@ export interface WorkflowDeadLetteredEvent {
     maxRetries: number;          // the resolved budget that was exhausted
     errorMessage: string | null; // last error message, from pointer.persistenceData._errors (null if none recorded)
     deadLetteredAt: string;      // ISO8601
+    /**
+     * M10 — Why the instance was dead-lettered. Additive and OPTIONAL: handlers written
+     * before this field existed keep compiling and keep working, and emitters that do
+     * not set it are still valid events.
+     *
+     *  - `"retries-exhausted"`      — H5: the step's retry budget ran out.
+     *  - `"step-not-found"`         — H5: no step in the definition matches the pointer.
+     *  - `"definition-not-registered"` — M1: no definition for (definitionId, version).
+     *  - `"definition-changed"`     — M10: the graph changed under a running instance.
+     */
+    reason?: "retries-exhausted" | "step-not-found" | "definition-not-registered" | "definition-changed";
 }
 
 export type LifecycleEvent = WorkflowDeadLetteredEvent;
