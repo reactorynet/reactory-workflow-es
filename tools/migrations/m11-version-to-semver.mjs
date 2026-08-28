@@ -79,10 +79,15 @@ async function loadDriver(name) {
   }
 }
 
+// Split on the FIRST "=" only. Connection strings carry their own "=" inside query
+// parameters (?socketTimeoutMS=360000&authSource=admin), and splitting on every "="
+// truncates the URI at the first option — which the driver then rejects with the
+// misleading "URI cannot contain options with no value".
 const args = Object.fromEntries(
   process.argv.slice(2).map(a => {
-    const [k, v] = a.replace(/^--/, '').split('=');
-    return [k, v === undefined ? true : v];
+    const raw = a.replace(/^--/, '');
+    const eq = raw.indexOf('=');
+    return eq === -1 ? [raw, true] : [raw.slice(0, eq), raw.slice(eq + 1)];
   })
 );
 

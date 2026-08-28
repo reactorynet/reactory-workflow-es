@@ -82,5 +82,5 @@ matter.
 | Store | Status |
 |---|---|
 | sqlite | **Verified end to end** against a seeded legacy database: column retyped `INTEGER` → `VARCHAR(64)`, values migrated, `definitionFingerprint` added, M2 index and foreign-key rows preserved, dry-run confirmed to write nothing, second run a no-op, pre-existing string version left untouched. |
+| mongo | **Verified end to end** against an isolated probe database: integer versions migrated to `"N.0.0"`, a pre-existing `"1.4.2"` left untouched, second run a no-op, exit `0`. Also dry-run clean against a real dev store (1343 instances). |
 | postgres | **Not executed** — no live instance available at authoring time. The `ALTER … USING` and transaction handling are written but unproven. Dry-run first; it is read-only. |
-| mongo | **Not executed** — the local instance required credentials not available at authoring time. The `$type: "number"` filter and `$concat` pipeline are written but unproven. Dry-run first; it is read-only. |
