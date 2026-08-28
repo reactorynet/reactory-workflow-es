@@ -8,7 +8,7 @@
 | **Target** | Both (Cloud + Electron) |
 | **Severity** | Medium |
 | **Owner tag** | `[claude]` |
-| **Status** | spec |
+| **Status** | done |
 | **Depends on** | M1 (done), M10 definition fingerprint (done) |
 | **Author / reviewer** | Werner Weber / — |
 

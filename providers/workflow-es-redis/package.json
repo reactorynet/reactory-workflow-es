@@ -21,12 +21,12 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "@reactorynet/workflow-es": "2.6.0",
+    "@reactorynet/workflow-es": "3.0.0",
     "inversify": "^6.0.0",
     "reflect-metadata": "^0.2.0"
   },
   "devDependencies": {
-    "@reactorynet/workflow-es": "2.6.0",
+    "@reactorynet/workflow-es": "3.0.0",
     "@types/jasmine": "^4.6.0",
     "@types/node": "^20.0.0",
     "inversify": "^6.0.0",
