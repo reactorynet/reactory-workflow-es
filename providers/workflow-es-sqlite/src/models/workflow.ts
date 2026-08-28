@@ -33,8 +33,11 @@ export class Workflow extends Model {
     @Column(DataType.STRING)
     workflowDefinitionId: string;
 
-    @Column(DataType.INTEGER)
-    version: number;
+    // M11 — semantic version string ("major.minor.patch"). Was INTEGER; an existing
+    // table is NOT altered by sequelize.sync(), so a deployed store must be migrated by
+    // tools/migrations/m11-version-to-semver.mjs BEFORE this code runs.
+    @Column(DataType.STRING)
+    version: string;
 
     @Column(DataType.STRING)
     description: string;

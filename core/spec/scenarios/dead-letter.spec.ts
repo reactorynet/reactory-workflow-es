@@ -17,7 +17,7 @@ describe("dead letter scenario", () => {
 
     class DeadLetter_Workflow implements WorkflowBase<any> {
         public id: string = "dead-letter-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -45,7 +45,7 @@ describe("dead letter scenario", () => {
     beforeAll(async () => {
         host.registerWorkflow(DeadLetter_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("dead-letter-workflow", 1, {});
+        workflowId = await host.startWorkflow("dead-letter-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status === WorkflowStatus.DeadLettered);
@@ -100,7 +100,7 @@ describe("dead letter scenario - step not found", () => {
 
     class Empty_Workflow implements WorkflowBase<any> {
         public id: string = "step-not-found-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder.startWith(NoOp);
@@ -125,7 +125,7 @@ describe("dead letter scenario - step not found", () => {
         let instance = new WorkflowInstance();
         instance.id = "snf-instance-1";
         instance.workflowDefinitionId = "step-not-found-workflow";
-        instance.version = 1;
+        instance.version = "1.0.0";
         instance.status = WorkflowStatus.Runnable;
         instance.data = {};
         instance.createTime = new Date();

@@ -45,7 +45,7 @@ class ThrowingStep extends StepBody {
 
 class SimpleWorkflow implements WorkflowBase<any> {
     public id   = "structured-log-simple";
-    public version = 1;
+    public version = "1.0.0";
     public build(builder: WorkflowBuilder<any>) {
         builder.startWith(SimpleStep);
     }
@@ -53,7 +53,7 @@ class SimpleWorkflow implements WorkflowBase<any> {
 
 class ThrowingWorkflow implements WorkflowBase<any> {
     public id      = "structured-log-throwing";
-    public version = 1;
+    public version = "1.0.0";
     public build(builder: WorkflowBuilder<any>) {
         builder.startWith(ThrowingStep);
     }
@@ -90,7 +90,7 @@ describe("structured-logging", () => {
             host.registerWorkflow(ThrowingWorkflow);
             await host.start();
 
-            workflowId = await host.startWorkflow("structured-log-throwing", 1, {});
+            workflowId = await host.startWorkflow("structured-log-throwing", "1.0.0", {});
             // Spin until the workflow is no longer Runnable (completes or dead-letters).
             await spinWait(async () => {
                 const inst = await persistence.getWorkflowInstance(workflowId);
@@ -135,7 +135,7 @@ describe("structured-logging", () => {
             host.registerWorkflow(SimpleWorkflow);
             await host.start();
 
-            workflowId = await host.startWorkflow("structured-log-simple", 1, {});
+            workflowId = await host.startWorkflow("structured-log-simple", "1.0.0", {});
             await spinWait(async () => {
                 const inst = await persistence.getWorkflowInstance(workflowId);
                 return inst.status !== WorkflowStatus.Runnable;

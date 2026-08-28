@@ -2,7 +2,15 @@ import { WorkflowBuilder } from "../fluent-builders";
 
 export abstract class WorkflowBase<TData> {
     public abstract id: string;
-    public abstract version: number;
+    /**
+     * Semantic version, conventionally "major.minor.patch".
+     *
+     * M11 — compared by EXACT STRING EQUALITY. The engine never parses, orders, or
+     * range-matches it, so any stable string works (a date stamp, a git sha). Resolving a
+     * range at load time would let an in-flight instance resume against a different graph
+     * than it started on, which is exactly what M1 and M10 exist to prevent.
+     */
+    public abstract version: string;
     public abstract build(builder: WorkflowBuilder<TData>): void;
 
     /**

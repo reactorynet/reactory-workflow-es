@@ -33,7 +33,7 @@ describe("multiple outcomes", () => {
 
     class Outcome_Workflow implements WorkflowBase<any> {    
         public id: string = "outcome-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {        
             var taskA = builder.startWith(TaskA);
@@ -59,7 +59,7 @@ describe("multiple outcomes", () => {
         host.registerWorkflow(Outcome_Workflow);
         await host.start();
 
-        workflowId = await host.startWorkflow("outcome-workflow", 1, null);
+        workflowId = await host.startWorkflow("outcome-workflow", "1.0.0", null);
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return  (instance.status != WorkflowStatus.Runnable);

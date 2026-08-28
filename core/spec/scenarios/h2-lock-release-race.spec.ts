@@ -58,7 +58,7 @@ describe("h2 lock-release race — ordering", () => {
 
     class H2_Ordering_Workflow implements WorkflowBase<any> {
         public id: string = "h2-ordering";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -88,7 +88,7 @@ describe("h2 lock-release race — ordering", () => {
         host.registerWorkflow(H2_Ordering_Workflow);
         await host.start();
 
-        workflowId = await host.startWorkflow("h2-ordering", 1, {});
+        workflowId = await host.startWorkflow("h2-ordering", "1.0.0", {});
         // The startWorkflow enqueue above is legitimately outside any lock;
         // record only from here (worker-driven activity).
         lock.recording = true;
@@ -162,7 +162,7 @@ describe("h2 lock-release race — contention and idempotency", () => {
 
     class H2_Contention_Workflow implements WorkflowBase<any> {
         public id: string = "h2-contention";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -201,7 +201,7 @@ describe("h2 lock-release race — contention and idempotency", () => {
         host.registerWorkflow(H2_Contention_Workflow);
         await host.start();
 
-        workflowId = await host.startWorkflow("h2-contention", 1, {});
+        workflowId = await host.startWorkflow("h2-contention", "1.0.0", {});
         // Duplicate enqueue of the same id — two overlapping processWorkflow
         // attempts for the same pre-event state.
         await queue.queueForProcessing(workflowId, QueueType.Workflow);
@@ -281,7 +281,7 @@ describe("h2 error path — lock released exactly once, no post-processing", () 
 
     class H2_Error_Workflow implements WorkflowBase<any> {
         public id: string = "h2-error";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder.startWith(BoomStep);
@@ -309,7 +309,7 @@ describe("h2 error path — lock released exactly once, no post-processing", () 
         host.registerWorkflow(H2_Error_Workflow);
         await host.start();
 
-        workflowId = await host.startWorkflow("h2-error", 1, {});
+        workflowId = await host.startWorkflow("h2-error", "1.0.0", {});
         // A dequeue for an id with no stored instance (getWorkflowInstance -> falsy).
         await queue.queueForProcessing(missingId, QueueType.Workflow);
         lock.recording = true;

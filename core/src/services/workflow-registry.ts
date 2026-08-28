@@ -7,7 +7,7 @@ import { WorkflowBuilder } from "../fluent-builders";
 export class WorkflowRegistry implements IWorkflowRegistry {
     private registry: RegistryEntry[] = [];
 
-    public getDefinition(id: string, version: number): WorkflowDefinition {
+    public getDefinition(id: string, version: string): WorkflowDefinition {
         const def = this.tryGetDefinition(id, version);
         if (!def)
             throw new Error(`Workflow not registered: ${id}@${version}`);
@@ -19,7 +19,7 @@ export class WorkflowRegistry implements IWorkflowRegistry {
      * Used by the executor at load time so a missing (id, version) pair can be
      * dead-lettered cleanly instead of propagating an exception.
      */
-    public tryGetDefinition(id: string, version: number): WorkflowDefinition | undefined {
+    public tryGetDefinition(id: string, version: string): WorkflowDefinition | undefined {
         const item = this.registry.find(x => x.id === id && x.version === version);
         return item ? item.defintion : undefined;
     }
@@ -39,6 +39,6 @@ export class WorkflowRegistry implements IWorkflowRegistry {
 
 class RegistryEntry {
     public id: string;
-    public version: number;
+    public version: string;
     public defintion: WorkflowDefinition;
 }

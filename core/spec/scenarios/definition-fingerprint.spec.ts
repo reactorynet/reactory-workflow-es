@@ -49,7 +49,7 @@ class StepC extends StepBody {
 function stepsOf(build: (b: WorkflowBuilder<any>) => void) {
     const builder = new WorkflowBuilder<any>();
     build(builder);
-    return builder.build("x", 1).steps;
+    return builder.build("x", "1.0.0").steps;
 }
 
 // ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ describe("definition-fingerprint — the hash itself", () => {
 // ---------------------------------------------------------------------------
 class PinnedWorkflow implements WorkflowBase<any> {
     public id: string = "pinned-workflow";
-    public version: number = 1;
+    public version: string = "1.0.0";
     public build(builder: WorkflowBuilder<any>) { builder.startWith(StepA).then(StepB); }
 }
 
@@ -143,8 +143,8 @@ describe("definition-fingerprint — instances are pinned at start", () => {
         host.registerWorkflow(PinnedWorkflow);
         await host.start();
 
-        registeredFingerprint = registry.getDefinition("pinned-workflow", 1).fingerprint;
-        const id = await host.startWorkflow("pinned-workflow", 1, {});
+        registeredFingerprint = registry.getDefinition("pinned-workflow", "1.0.0").fingerprint;
+        const id = await host.startWorkflow("pinned-workflow", "1.0.0", {});
         await spinWait(async () => {
             const i = await persistence.getWorkflowInstance(id);
             return i && i.status === WorkflowStatus.Complete;
@@ -175,7 +175,7 @@ describe("definition-fingerprint — instances are pinned at start", () => {
 /** Same id and version as PinnedWorkflow, but a DIFFERENT graph — an in-place edit. */
 class EditedWorkflow implements WorkflowBase<any> {
     public id: string = "pinned-workflow";
-    public version: number = 1;
+    public version: string = "1.0.0";
     public build(builder: WorkflowBuilder<any>) { builder.startWith(StepA).then(StepC).then(StepB); }
 }
 
@@ -183,7 +183,7 @@ function suspendedInstanceAt(stepId: number, fingerprint?: string): WorkflowInst
     const instance = new WorkflowInstance();
     instance.id = "fp-instance-" + stepId + "-" + (fingerprint || "none");
     instance.workflowDefinitionId = "pinned-workflow";
-    instance.version = 1;
+    instance.version = "1.0.0";
     instance.status = WorkflowStatus.Runnable;
     instance.data = {};
     instance.createTime = new Date();
@@ -288,7 +288,7 @@ describe("definition-fingerprint — backward compatibility", () => {
     it("an instance whose fingerprint MATCHES executes normally", async () => {
         const executor = container.get<IWorkflowExecutor>(TYPES.IWorkflowExecutor);
         const registry = container.get<IWorkflowRegistry>(TYPES.IWorkflowRegistry);
-        const current = registry.getDefinition("pinned-workflow", 1).fingerprint;
+        const current = registry.getDefinition("pinned-workflow", "1.0.0").fingerprint;
         const matched = suspendedInstanceAt(0, current);
         await executor.execute(matched);
         expect(matched.status).not.toBe(WorkflowStatus.DeadLettered);

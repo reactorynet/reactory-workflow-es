@@ -18,7 +18,7 @@ describe("retry budget scenario - exhausted budget dead-letters", () => {
 
     class BoundedRetry_Workflow implements WorkflowBase<any> {
         public id: string = "bounded-retry-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -38,7 +38,7 @@ describe("retry budget scenario - exhausted budget dead-letters", () => {
     beforeAll(async () => {
         host.registerWorkflow(BoundedRetry_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("bounded-retry-workflow", 1, {});
+        workflowId = await host.startWorkflow("bounded-retry-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status !== WorkflowStatus.Runnable);
@@ -72,7 +72,7 @@ describe("retry budget scenario - recovery within budget", () => {
 
     class RecoveringRetry_Workflow implements WorkflowBase<any> {
         public id: string = "recovering-retry-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -92,7 +92,7 @@ describe("retry budget scenario - recovery within budget", () => {
     beforeAll(async () => {
         host.registerWorkflow(RecoveringRetry_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("recovering-retry-workflow", 1, {});
+        workflowId = await host.startWorkflow("recovering-retry-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status !== WorkflowStatus.Runnable);
@@ -123,7 +123,7 @@ describe("retry budget scenario - suspend strategy unchanged", () => {
 
     class Suspend_Workflow implements WorkflowBase<any> {
         public id: string = "suspend-on-error-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -143,7 +143,7 @@ describe("retry budget scenario - suspend strategy unchanged", () => {
     beforeAll(async () => {
         host.registerWorkflow(Suspend_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("suspend-on-error-workflow", 1, {});
+        workflowId = await host.startWorkflow("suspend-on-error-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status !== WorkflowStatus.Runnable);
@@ -174,7 +174,7 @@ describe("retry budget scenario - terminate strategy unchanged", () => {
 
     class Terminate_Workflow implements WorkflowBase<any> {
         public id: string = "terminate-on-error-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -194,7 +194,7 @@ describe("retry budget scenario - terminate strategy unchanged", () => {
     beforeAll(async () => {
         host.registerWorkflow(Terminate_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("terminate-on-error-workflow", 1, {});
+        workflowId = await host.startWorkflow("terminate-on-error-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status !== WorkflowStatus.Runnable);

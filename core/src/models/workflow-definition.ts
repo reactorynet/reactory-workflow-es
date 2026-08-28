@@ -2,7 +2,8 @@ import { WorkflowStepBase } from "./workflow-step";
 
 export class WorkflowDefinition {
     public id : string;
-    public version: number;
+    /** M11 — semantic version string. Exact-equality key; never parsed or ordered. */
+    public version: string;
     public description: string;
     public steps: Array<WorkflowStepBase> = [];
     public errorBehavior : number;

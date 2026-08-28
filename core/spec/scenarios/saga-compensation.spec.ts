@@ -44,7 +44,7 @@ describe("saga compensation scenario", () => {
 
     class Saga_Workflow implements WorkflowBase<any> {
         public id: string = "saga-compensation-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -69,7 +69,7 @@ describe("saga compensation scenario", () => {
     beforeAll(async () => {
         host.registerWorkflow(Saga_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("saga-compensation-workflow", 1, {});
+        workflowId = await host.startWorkflow("saga-compensation-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -146,7 +146,7 @@ describe("saga revert scenario", () => {
 
     class Revert_Workflow implements WorkflowBase<any> {
         public id: string = "saga-revert-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -170,7 +170,7 @@ describe("saga revert scenario", () => {
     beforeAll(async () => {
         host.registerWorkflow(Revert_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("saga-revert-workflow", 1, {});
+        workflowId = await host.startWorkflow("saga-revert-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);

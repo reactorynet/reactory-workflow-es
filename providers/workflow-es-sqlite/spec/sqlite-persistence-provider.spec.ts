@@ -42,7 +42,7 @@ describe("sqlite-provider conformance", () => {
         beforeAll(async () => {
             wf1 = new WorkflowInstance();
             wf1.workflowDefinitionId = "test-workflow";
-            wf1.version = 1;
+            wf1.version = "1.0.0";
             wf1.status = WorkflowStatus.Runnable;
             wf1.nextExecution = 0;
             wf1.data = { counter: 1 };
@@ -71,7 +71,7 @@ describe("sqlite-provider conformance", () => {
         it("should round-trip the persisted fields", () => {
             expect(wf2.id).toEqual(wf1.id);
             expect(wf2.workflowDefinitionId).toEqual("test-workflow");
-            expect(wf2.version).toEqual(1);
+            expect(wf2.version).toEqual("1.0.0");
             expect(wf2.status).toEqual(WorkflowStatus.Runnable);
             expect(wf2.nextExecution).toEqual(0);
             expect(wf2.data).toEqual({ counter: 1 });
@@ -123,7 +123,7 @@ describe("sqlite-provider conformance", () => {
         it("should have exactly 1 pointer after removing one", async () => {
             const wf = new WorkflowInstance();
             wf.workflowDefinitionId = "ptr-replace";
-            wf.version = 1;
+            wf.version = "1.0.0";
             wf.status = WorkflowStatus.Runnable;
             wf.nextExecution = 0;
             wf.data = {};
@@ -162,7 +162,7 @@ describe("sqlite-provider conformance", () => {
         it("should respect status and nextExecution — not return a future-scheduled instance", async () => {
             const wf = new WorkflowInstance();
             wf.workflowDefinitionId = "future-workflow";
-            wf.version = 1;
+            wf.version = "1.0.0";
             wf.status = WorkflowStatus.Runnable;
             wf.nextExecution = Date.now() + 60_000; // 1 minute in the future
             wf.data = {};
@@ -292,7 +292,7 @@ describe("sqlite-provider conformance", () => {
             const nested = { a: [1, { b: null }], c: "x" };
             const wf = new WorkflowInstance();
             wf.workflowDefinitionId = "json-test";
-            wf.version = 1;
+            wf.version = "1.0.0";
             wf.status = WorkflowStatus.Runnable;
             wf.nextExecution = 0;
             wf.data = nested;
@@ -310,7 +310,7 @@ describe("sqlite-provider conformance", () => {
         async function newWorkflow(): Promise<WorkflowInstance> {
             const wf = new WorkflowInstance();
             wf.workflowDefinitionId = "cas-workflow";
-            wf.version = 1;
+            wf.version = "1.0.0";
             wf.status = WorkflowStatus.Runnable;
             wf.nextExecution = 0;
             wf.data = { n: 0 };
@@ -380,7 +380,7 @@ describe("sqlite-provider conformance", () => {
 
             const wf = new WorkflowInstance();
             wf.workflowDefinitionId = "durable-wf";
-            wf.version = 2;
+            wf.version = "2.0.0";
             wf.status = WorkflowStatus.Runnable;
             wf.nextExecution = 0;
             wf.data = { value: "persisted" };

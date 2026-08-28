@@ -16,7 +16,7 @@ describe("multi-tenancy (M6)", () => {
 
     class TenantWorkflow implements WorkflowBase<TenantData> {
         public id: string = "tenant-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<TenantData>) {
             builder
@@ -43,8 +43,8 @@ describe("multi-tenancy (M6)", () => {
         host.registerWorkflow(TenantWorkflow);
         await host.start();
 
-        idA = await host.startWorkflow("tenant-workflow", 1, {}, "A");
-        idB = await host.startWorkflow("tenant-workflow", 1, {}, "B");
+        idA = await host.startWorkflow("tenant-workflow", "1.0.0", {}, "A");
+        idB = await host.startWorkflow("tenant-workflow", "1.0.0", {}, "B");
 
         // Wait until BOTH tenants have an active subscription on the same (name, key).
         await spinWait(async () => {
@@ -121,7 +121,7 @@ describe("multi-tenancy (M6) default-tenant regression", () => {
 
     class Event_Workflow implements WorkflowBase<MyDataClass> {
         public id: string = "default-tenant-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<MyDataClass>) {
             builder
@@ -145,7 +145,7 @@ describe("multi-tenancy (M6) default-tenant regression", () => {
         await host.start();
 
         // Zero-arg-style call: NO tenantId — must behave exactly as before.
-        workflowId = await host.startWorkflow("default-tenant-workflow", 1, { value1: 2, value2: 3 });
+        workflowId = await host.startWorkflow("default-tenant-workflow", "1.0.0", { value1: 2, value2: 3 });
 
         await spinWait(async () => {
             const subs = await persistence.getSubscriptions(DEFAULT_TENANT, "my-event", "0", new Date());

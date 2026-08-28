@@ -9,7 +9,7 @@ describe("concurrency token (memory provider)", () => {
     function newRunnableInstance(): WorkflowInstance {
         const wf = new WorkflowInstance();
         wf.workflowDefinitionId = "test-wf";
-        wf.version = 1;
+        wf.version = "1.0.0";
         wf.status = WorkflowStatus.Runnable;
         wf.nextExecution = 0;
         wf.data = { counter: 1 };

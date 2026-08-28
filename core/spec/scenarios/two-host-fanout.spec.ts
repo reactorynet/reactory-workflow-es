@@ -63,7 +63,7 @@ describe("two-host fan-out (shared backend)", () => {
 
     class FanoutWorkflow implements WorkflowBase<any> {
         public id: string = "fanout";
-        public version: number = 1;
+        public version: string = "1.0.0";
         public build(builder: WorkflowBuilder<any>) {
             builder.startWith(RecordStep);
         }
@@ -96,7 +96,7 @@ describe("two-host fan-out (shared backend)", () => {
         await hostB.start();
 
         for (let i = 0; i < INSTANCE_COUNT; i++) {
-            ids.push(await hostA.startWorkflow("fanout", 1, { i }));
+            ids.push(await hostA.startWorkflow("fanout", "1.0.0", { i }));
         }
 
         await spinWait(async () => {
@@ -142,7 +142,7 @@ describe("single-node providers fail loud", () => {
         const host = config.getHost();
         host.registerWorkflow(class Wf implements WorkflowBase<any> {
             public id = "guard-wf-1";
-            public version = 1;
+            public version = "1.0.0";
             public build(builder: WorkflowBuilder<any>) {
                 builder.startWith(class S extends StepBody {
                     public run(): Promise<ExecutionResult> { return ExecutionResult.next(); }
@@ -172,7 +172,7 @@ describe("single-node providers fail loud", () => {
         const host = config.getHost();
         host.registerWorkflow(class Wf implements WorkflowBase<any> {
             public id = "guard-wf-2";
-            public version = 1;
+            public version = "1.0.0";
             public build(builder: WorkflowBuilder<any>) {
                 builder.startWith(class S extends StepBody {
                     public run(): Promise<ExecutionResult> { return ExecutionResult.next(); }

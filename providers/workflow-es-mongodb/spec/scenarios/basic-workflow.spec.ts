@@ -26,7 +26,7 @@ let basicWorkflowScope = {
 
      class Basic_Workflow implements WorkflowBase<any> {    
          public id: string = "basic-workflow";
-         public version: number = 1;
+         public version: string = "1.0.0";
 
          public build(builder: WorkflowBuilder<any>) {        
              builder
@@ -49,7 +49,7 @@ let basicWorkflowScope = {
      beforeAll(async (done) => {
         host.registerWorkflow(Basic_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("basic-workflow", 1, null);
+        workflowId = await host.startWorkflow("basic-workflow", "1.0.0", null);
         spinWaitCallback(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return  (instance.status != WorkflowStatus.Runnable);

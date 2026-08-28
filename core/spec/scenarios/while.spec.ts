@@ -48,7 +48,7 @@ import { spinWait } from "../helpers/spin-wait";
 
     class Data_Workflow implements WorkflowBase<MyDataClass> {    
         public id: string = "while-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<MyDataClass>) {        
             builder
@@ -75,7 +75,7 @@ import { spinWait } from "../helpers/spin-wait";
     beforeAll(async () => {
         host.registerWorkflow(Data_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("while-workflow", 1, { value: 0 });
+        workflowId = await host.startWorkflow("while-workflow", "1.0.0", { value: 0 });
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return  (instance.status != WorkflowStatus.Runnable);

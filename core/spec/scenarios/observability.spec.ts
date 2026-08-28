@@ -20,7 +20,7 @@ describe("observability - step span and duration", () => {
     }
     class Obs_Workflow implements WorkflowBase<any> {
         public id: string = "obs-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
         public build(builder: WorkflowBuilder<any>) {
             builder.startWith(Step1).then(Step2);
         }
@@ -40,7 +40,7 @@ describe("observability - step span and duration", () => {
     beforeAll(async () => {
         host.registerWorkflow(Obs_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("obs-workflow", 1, {});
+        workflowId = await host.startWorkflow("obs-workflow", "1.0.0", {});
         await spinWait(async () => (await persistence.getWorkflowInstance(workflowId)).status === WorkflowStatus.Complete);
     });
 
@@ -77,7 +77,7 @@ describe("observability - error metric and span error", () => {
     }
     class Failing_Workflow implements WorkflowBase<any> {
         public id: string = "obs-failing-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
         public build(builder: WorkflowBuilder<any>) {
             builder.startWith(FailingStep, step => step.onError(WorkflowErrorHandling.Terminate));
         }
@@ -97,7 +97,7 @@ describe("observability - error metric and span error", () => {
     beforeAll(async () => {
         host.registerWorkflow(Failing_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("obs-failing-workflow", 1, {});
+        workflowId = await host.startWorkflow("obs-failing-workflow", "1.0.0", {});
         await spinWait(async () => (await persistence.getWorkflowInstance(workflowId)).status !== WorkflowStatus.Runnable);
     });
 
@@ -126,7 +126,7 @@ describe("observability - retry metric", () => {
     }
     class Retry_Workflow implements WorkflowBase<any> {
         public id: string = "obs-retry-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
         public build(builder: WorkflowBuilder<any>) {
             builder.startWith(FailsOnce, step => step.onError(WorkflowErrorHandling.Retry, 50, 3));
         }
@@ -144,7 +144,7 @@ describe("observability - retry metric", () => {
     beforeAll(async () => {
         host.registerWorkflow(Retry_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("obs-retry-workflow", 1, {});
+        workflowId = await host.startWorkflow("obs-retry-workflow", "1.0.0", {});
         await spinWait(async () => (await persistence.getWorkflowInstance(workflowId)).status === WorkflowStatus.Complete);
     });
 
@@ -165,7 +165,7 @@ describe("observability - event counter and gauges", () => {
     }
     class Gauge_Workflow implements WorkflowBase<any> {
         public id: string = "obs-gauge-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
         public build(builder: WorkflowBuilder<any>) {
             builder.startWith(Step1)
                 .waitFor("obs-event", () => "0");
@@ -184,7 +184,7 @@ describe("observability - event counter and gauges", () => {
     beforeAll(async () => {
         host.registerWorkflow(Gauge_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("obs-gauge-workflow", 1, {});
+        workflowId = await host.startWorkflow("obs-gauge-workflow", "1.0.0", {});
         await spinWait(async () => {
             const subs = await persistence.getSubscriptions(DEFAULT_TENANT, "obs-event", "0", new Date());
             return subs.length > 0;
@@ -328,7 +328,7 @@ describe("observability - throwing metrics does not fail the workflow", () => {
     }
     class Throwing_Workflow implements WorkflowBase<any> {
         public id: string = "obs-throwing-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
         public build(builder: WorkflowBuilder<any>) { builder.startWith(Step1); }
     }
 
@@ -344,7 +344,7 @@ describe("observability - throwing metrics does not fail the workflow", () => {
     beforeAll(async () => {
         host.registerWorkflow(Throwing_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("obs-throwing-workflow", 1, {});
+        workflowId = await host.startWorkflow("obs-throwing-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return instance.status === WorkflowStatus.Complete;

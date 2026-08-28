@@ -18,7 +18,7 @@ export class WorkflowBuilder<TData> {
      *        fingerprint, for definitions generated from an external source. See
      *        `WorkflowBase.fingerprintSeed`.
      */
-    public build(id: string, version: number, fingerprintSeed?: string): WorkflowDefinition {
+    public build(id: string, version: string, fingerprintSeed?: string): WorkflowDefinition {
         var result = new WorkflowDefinition();
         result.id = id;
         result.version = version;

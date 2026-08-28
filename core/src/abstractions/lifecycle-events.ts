@@ -14,7 +14,7 @@ export interface WorkflowDeadLetteredEvent {
     event: "workflow.dead-lettered";
     workflowId: string;
     workflowDefinitionId: string;
-    version: number;
+    version: string;
     pointerId: string;
     stepId: number;
     retryCount: number;          // failed attempts processed by the error strategy when the budget was declared exhausted

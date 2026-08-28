@@ -32,7 +32,7 @@ class CountingStep extends StepBody {
 
 class Concurrency_Workflow implements WorkflowBase<any> {
     public id: string = "bounded-concurrency-workflow";
-    public version: number = 1;
+    public version: string = "1.0.0";
     public build(builder: WorkflowBuilder<any>) {
         builder.startWith(CountingStep);
     }
@@ -54,7 +54,7 @@ class GatedStep extends StepBody {
 
 class Gated_Workflow implements WorkflowBase<any> {
     public id: string = "bounded-concurrency-gated";
-    public version: number = 1;
+    public version: string = "1.0.0";
     public build(builder: WorkflowBuilder<any>) {
         builder.startWith(GatedStep);
     }
@@ -88,7 +88,7 @@ describe("bounded concurrency", () => {
             await host.start();
 
             for (let i = 0; i < BURST_SIZE; i++) {
-                workflowIds.push(await host.startWorkflow("bounded-concurrency-workflow", 1, {}));
+                workflowIds.push(await host.startWorkflow("bounded-concurrency-workflow", "1.0.0", {}));
             }
 
             await spinWait(async () => completedCount === BURST_SIZE);
@@ -141,7 +141,7 @@ describe("bounded concurrency", () => {
             worker = getWorkflowQueueWorker(host);
 
             for (let i = 0; i < 5; i++) {
-                await host.startWorkflow("bounded-concurrency-gated", 1, {});
+                await host.startWorkflow("bounded-concurrency-gated", "1.0.0", {});
             }
         });
 

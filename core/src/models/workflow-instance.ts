@@ -11,7 +11,8 @@ export class WorkflowInstance {
      */
     public tenantId : string;
     public workflowDefinitionId : string;
-    public version : number;
+    /** M11 — semantic version of the definition this instance runs. Immutable once set. */
+    public version : string;
     public description : string;
     public nextExecution : number;
     public status : number;

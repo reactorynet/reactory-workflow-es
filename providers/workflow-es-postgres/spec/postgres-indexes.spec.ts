@@ -120,7 +120,7 @@ describe("postgres index presence and EXPLAIN verification (M2)", () => {
                     id: require("crypto").randomUUID(),
                     tenantId: "default",
                     workflowDefinitionId: "bench-wf",
-                    version: 1,
+                    version: "1.0.0",
                     status: global % 10 === 0
                         ? WorkflowStatus.Runnable   // 10 % are Runnable-and-due
                         : WorkflowStatus.Complete,

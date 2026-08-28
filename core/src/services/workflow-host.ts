@@ -156,7 +156,7 @@ export class WorkflowHost implements IWorkflowHost {
         return configured;
     }
     
-    public async startWorkflow(id: string, version: number, data: any = {}, tenantId: string = DEFAULT_TENANT): Promise<string> {
+    public async startWorkflow(id: string, version: string, data: any = {}, tenantId: string = DEFAULT_TENANT): Promise<string> {
         let self = this;
         let def = self.registry.getDefinition(id, version);
         let wf = new WorkflowInstance();

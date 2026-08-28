@@ -41,7 +41,7 @@ describe("foreach scope isolation — multi-step body (fixed)", () => {
 
     class Isolation_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-isolation-fixed";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -72,7 +72,7 @@ describe("foreach scope isolation — multi-step body (fixed)", () => {
     beforeAll(async () => {
         host.registerWorkflow(Isolation_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-isolation-fixed", 1, {});
+        workflowId = await host.startWorkflow("foreach-isolation-fixed", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -135,7 +135,7 @@ describe("foreach scope isolation — multi-step body (two-parameter regression 
 
     class Regression_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-isolation-regression-witness";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -163,7 +163,7 @@ describe("foreach scope isolation — multi-step body (two-parameter regression 
     beforeAll(async () => {
         host.registerWorkflow(Regression_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-isolation-regression-witness", 1, {});
+        workflowId = await host.startWorkflow("foreach-isolation-regression-witness", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -198,7 +198,7 @@ describe("foreach scope isolation — context.item outside a container", () => {
 
     class Flat_Workflow implements WorkflowBase<any> {
         public id: string = "flat-two-step-no-container";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -222,7 +222,7 @@ describe("foreach scope isolation — context.item outside a container", () => {
     beforeAll(async () => {
         host.registerWorkflow(Flat_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("flat-two-step-no-container", 1, {});
+        workflowId = await host.startWorkflow("flat-two-step-no-container", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -257,7 +257,7 @@ describe("foreach scope isolation — two-parameter mappers keep working", () =>
 
     class BackCompat_Workflow implements WorkflowBase<any> {
         public id: string = "two-param-backcompat";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -279,7 +279,7 @@ describe("foreach scope isolation — two-parameter mappers keep working", () =>
     beforeAll(async () => {
         host.registerWorkflow(BackCompat_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("two-param-backcompat", 1, { total: 42 });
+        workflowId = await host.startWorkflow("two-param-backcompat", "1.0.0", { total: 42 });
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -328,7 +328,7 @@ describe("foreach scope isolation — if inside foreach branches per item", () =
 
     class IfBranch_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-if-branches-per-item";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -369,7 +369,7 @@ describe("foreach scope isolation — if inside foreach branches per item", () =
     beforeAll(async () => {
         host.registerWorkflow(IfBranch_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-if-branches-per-item", 1, {});
+        workflowId = await host.startWorkflow("foreach-if-branches-per-item", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -421,7 +421,7 @@ describe("foreach scope isolation — documented limitation: if-body loses the o
 
     class IfLosesItem_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-if-loses-item-documented";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -446,7 +446,7 @@ describe("foreach scope isolation — documented limitation: if-body loses the o
     beforeAll(async () => {
         host.registerWorkflow(IfLosesItem_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-if-loses-item-documented", 1, {});
+        workflowId = await host.startWorkflow("foreach-if-loses-item-documented", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -485,7 +485,7 @@ describe("foreach scope isolation — while inside foreach sees the item", () =>
 
     class While_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-while-sees-item";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -512,7 +512,7 @@ describe("foreach scope isolation — while inside foreach sees the item", () =>
     beforeAll(async () => {
         host.registerWorkflow(While_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-while-sees-item", 1, {});
+        workflowId = await host.startWorkflow("foreach-while-sees-item", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -560,7 +560,7 @@ describe("foreach scope isolation — nested foreach over the outer item's own c
 
     class Nested_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-nested-outer-item-collection";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -585,7 +585,7 @@ describe("foreach scope isolation — nested foreach over the outer item's own c
     beforeAll(async () => {
         host.registerWorkflow(Nested_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-nested-outer-item-collection", 1, {});
+        workflowId = await host.startWorkflow("foreach-nested-outer-item-collection", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -621,7 +621,7 @@ describe("foreach scope isolation — pointer counts are unchanged", () => {
 
     class PointerCount_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-pointer-count";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -642,7 +642,7 @@ describe("foreach scope isolation — pointer counts are unchanged", () => {
     beforeAll(async () => {
         host.registerWorkflow(PointerCount_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-pointer-count", 1, {});
+        workflowId = await host.startWorkflow("foreach-pointer-count", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -694,7 +694,7 @@ describe("foreach scope isolation — contextItem survives a host restart mid-bo
 
     class Restart_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-restart-mid-body";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -725,7 +725,7 @@ describe("foreach scope isolation — contextItem survives a host restart mid-bo
         config1.usePersistence(persistence);
         const host1 = config1.getHost();
         host1.registerWorkflow(Restart_Workflow);
-        workflowId = await host1.startWorkflow("foreach-restart-mid-body", 1, {});
+        workflowId = await host1.startWorkflow("foreach-restart-mid-body", "1.0.0", {});
         const executor1 = config1.getContainer().get<IWorkflowExecutor>(TYPES.IWorkflowExecutor);
 
         // Pass 1: genesis pointer runs Init, fans out to the foreach step.
@@ -775,7 +775,7 @@ describe("foreach scope isolation — mapper exceptions still route to handleSte
 
     class MapperThrows_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-mapper-throws";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -798,7 +798,7 @@ describe("foreach scope isolation — mapper exceptions still route to handleSte
     beforeAll(async () => {
         host.registerWorkflow(MapperThrows_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-mapper-throws", 1, {});
+        workflowId = await host.startWorkflow("foreach-mapper-throws", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);
@@ -854,7 +854,7 @@ describe("foreach scope isolation — saga compensation inside foreach sees its 
 
     class SagaForeach_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-saga-compensation";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -881,7 +881,7 @@ describe("foreach scope isolation — saga compensation inside foreach sees its 
     beforeAll(async () => {
         host.registerWorkflow(SagaForeach_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-saga-compensation", 1, {});
+        workflowId = await host.startWorkflow("foreach-saga-compensation", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);

@@ -39,7 +39,7 @@ class PassingStep extends StepBody {
 
 class VersionSafeWorkflow implements WorkflowBase<any> {
     public id: string = "version-safe-workflow";
-    public version: number = 1;
+    public version: string = "1.0.0";
 
     public build(builder: WorkflowBuilder<any>) {
         builder.startWith(PassingStep);
@@ -67,14 +67,14 @@ describe("version-safety — executing an instance whose (definitionId, version)
         let registry = container.get<IWorkflowRegistry>(TYPES.IWorkflowRegistry);
         let executor = container.get<IWorkflowExecutor>(TYPES.IWorkflowExecutor);
 
-        // Register version 1 only
+        // Register version 1.0.0 only
         registry.registerWorkflow(new VersionSafeWorkflow());
 
-        // Build a hand-crafted instance with version 999 (not registered)
+        // Build a hand-crafted instance with version 999.0.0 (not registered)
         instance = new WorkflowInstance();
         instance.id = "vs-test-instance-1";
         instance.workflowDefinitionId = "version-safe-workflow";
-        instance.version = 999; // unregistered
+        instance.version = "999.0.0"; // unregistered
         instance.status = WorkflowStatus.Runnable;
         instance.data = {};
         instance.createTime = new Date();
@@ -121,8 +121,8 @@ describe("version-safety — executing an instance whose (definitionId, version)
         expect(events[0].event).toBe("workflow.dead-lettered");
     });
 
-    it("event carries the correct version (999)", () => {
-        expect(events[0].version).toBe(999);
+    it("event carries the correct version (999.0.0)", () => {
+        expect(events[0].version).toBe("999.0.0");
     });
 
     it("event carries the correct workflowDefinitionId", () => {
@@ -137,8 +137,8 @@ describe("version-safety — executing an instance whose (definitionId, version)
         expect(events[0].errorMessage).toContain('definitionId="version-safe-workflow"');
     });
 
-    it("event errorMessage contains version=999", () => {
-        expect(events[0].errorMessage).toContain("version=999");
+    it("event errorMessage contains version=999.0.0", () => {
+        expect(events[0].errorMessage).toContain("version=999.0.0");
     });
 
     it("event errorMessage contains 'register all historical workflow versions'", () => {
@@ -168,7 +168,7 @@ describe("version-safety — a registered version runs to completion (regression
 
         host.registerWorkflow(VersionSafeWorkflow);
         await host.start();
-        workflowId = await host.startWorkflow("version-safe-workflow", 1, {});
+        workflowId = await host.startWorkflow("version-safe-workflow", "1.0.0", {});
 
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
@@ -220,12 +220,12 @@ describe("version-safety — an unregistered version dead-letters end-to-end via
 
         // Start a real workflow (version 1, registered) and stop the host immediately
         // so the workers don't race before we can mutate the instance.
-        workflowId = await host.startWorkflow("version-safe-workflow", 1, {});
+        workflowId = await host.startWorkflow("version-safe-workflow", "1.0.0", {});
         await host.stop();
 
         // Mutate the persisted instance to reference an unregistered version.
         let wf = await persistence.getWorkflowInstance(workflowId);
-        wf.version = 999;
+        wf.version = "999.0.0";
         wf.status = WorkflowStatus.Runnable;
         wf.nextExecution = 0;
         await persistence.persistWorkflow(wf);
@@ -305,7 +305,7 @@ describe("version-safety — startWorkflow for an unknown version rejects at cal
 
     it("rejects with 'Workflow not registered' for an unknown version", async () => {
         await expectAsync(
-            host.startWorkflow("version-safe-workflow", 2)
+            host.startWorkflow("version-safe-workflow", "2.0.0")
         ).toBeRejectedWithError(/Workflow not registered/);
     });
 
