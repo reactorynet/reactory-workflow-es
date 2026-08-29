@@ -92,6 +92,10 @@ const args = Object.fromEntries(
 );
 
 const DRY = Boolean(args['dry-run']);
+// Correct rows an EARLIER run of this script mapped to "N.0.0" when the definition id
+// proves the real version was e.g. "1.0.1". Off by default: without it, a string value
+// is never rewritten, which keeps an operator-set version safe.
+const REPAIR = Boolean(args['repair-from-id']);
 const QUIET = Boolean(args.quiet);
 const TABLE = args.table || 'workflows';
 const COLLECTION = args.collection || 'workflows';
@@ -108,24 +112,54 @@ function usage(message) {
   console.error('  node m11-version-to-semver.mjs --store=sqlite   --path=<file>  [--dry-run]');
   console.error('  node m11-version-to-semver.mjs --store=postgres --url=<url>    [--dry-run]');
   console.error('  node m11-version-to-semver.mjs --store=mongo    --url=<url>    [--dry-run]');
+  console.error('');
+  console.error('  --repair-from-id   also correct already-migrated rows whose definition id');
+  console.error('                     embeds a different (authoritative) semantic version');
   process.exit(1);
+}
+
+/**
+ * The semantic version embedded in a workflowDefinitionId, if it carries one.
+ *
+ * Definition ids follow `nameSpace.Name@major.minor.patch`, so the id is a SECOND,
+ * INDEPENDENT record of the version — and a lossless one. That matters because the
+ * integer in the version column went through the old truncating shim
+ * (engineWorkflowMajorVersion: "1.0.1" -> 1), so `N.0.0` cannot recover a non-zero
+ * minor or patch. Where the id carries the real version, it is authoritative.
+ */
+function versionFromDefinitionId(definitionId) {
+  if (!definitionId || typeof definitionId !== 'string') return null;
+  const at = definitionId.lastIndexOf('@');
+  if (at === -1) return null;
+  const candidate = definitionId.slice(at + 1);
+  return /^\d+\.\d+\.\d+$/.test(candidate) ? candidate : null;
 }
 
 /**
  * Map one legacy value to its migrated form, or null when it must be left alone.
  * Centralised so all three stores share exactly one definition of the mapping,
  * and so the idempotency rule (§6.11) has a single place to be wrong in.
+ *
+ * `definitionId` is optional but strongly preferred: without it the only available
+ * mapping is N -> "N.0.0", which is WRONG for any workflow whose real version had a
+ * non-zero minor or patch (the old shim had already discarded it). With it, the
+ * version embedded in the id wins.
  */
-function migratedValue(current) {
+function migratedValue(current, definitionId) {
+  const fromId = versionFromDefinitionId(definitionId);
+
   if (current === null || current === undefined) return null;      // leave NULL alone
   if (typeof current === 'string') {
-    // Already migrated, or a version the operator set by hand. Never rewrite.
+    // Already migrated, or a version the operator set by hand. Never rewrite --
+    // UNLESS --repair-from-id is set and the id proves this value is a bad guess
+    // left behind by an earlier run of this script.
+    if (REPAIR && fromId && fromId !== current) return fromId;
     return null;
   }
   if (typeof current === 'number' && Number.isFinite(current)) {
-    return `${Math.trunc(current)}.0.0`;
+    return fromId || `${Math.trunc(current)}.0.0`;
   }
-  if (typeof current === 'bigint') return `${current}.0.0`;
+  if (typeof current === 'bigint') return fromId || `${current}.0.0`;
   return null;
 }
 
@@ -169,11 +203,11 @@ async function migrateSqlite() {
     if (!versionCol) throw new Error(`table "${TABLE}" has no "version" column`);
     const hasFingerprint = cols.some(c => c.name === 'definitionFingerprint');
 
-    const rows = await all(`SELECT id, version, status FROM ${TABLE}`);
+    const rows = await all(`SELECT id, version, status, workflowDefinitionId FROM ${TABLE}`);
     let changed = 0, skipped = 0, atRisk = 0;
     const updates = [];
     for (const row of rows) {
-      const next = migratedValue(row.version);
+      const next = migratedValue(row.version, row.workflowDefinitionId);
       if (next === null) { if (typeof row.version === 'string') skipped++; continue; }
       updates.push({ id: row.id, version: next });
       changed++;
@@ -296,17 +330,29 @@ async function migrateMongo() {
 
   try {
     const col = client.db().collection(COLLECTION);
-    const numericFilter = { version: { $type: 'number' } };
 
     const scanned = await col.countDocuments({});
-    const changed = await col.countDocuments(numericFilter);
     const skipped = await col.countDocuments({ version: { $type: 'string' } });
-    const atRisk = await col.countDocuments({ ...numericFilter, status: { $in: NON_TERMINAL } });
+
+    // Compute every rewrite in JS rather than with an aggregation pipeline: the mapping
+    // has to consult workflowDefinitionId (see migratedValue), which $concat cannot do.
+    const candidates = await col
+      .find(REPAIR ? {} : { version: { $type: 'number' } })
+      .project({ _id: 1, version: 1, status: 1, workflowDefinitionId: 1 })
+      .toArray();
+
+    const ops = [];
+    let atRisk = 0;
+    for (const doc of candidates) {
+      const next = migratedValue(doc.version, doc.workflowDefinitionId);
+      if (next === null || next === doc.version) continue;
+      ops.push({ updateOne: { filter: { _id: doc._id }, update: { $set: { version: next } } } });
+      if (NON_TERMINAL.includes(doc.status)) atRisk++;
+    }
+    const changed = ops.length;
 
     if (!DRY && changed > 0) {
-      const result = await col.updateMany(numericFilter, [
-        { $set: { version: { $concat: [{ $toString: { $toInt: '$version' } }, '.0.0'] } } },
-      ]);
+      const result = await col.bulkWrite(ops, { ordered: false });
       if (result.modifiedCount !== changed) {
         warn(`  WARNING: expected to modify ${changed} documents, modified ${result.modifiedCount}.`);
         warn('  Re-run with --dry-run to confirm the remaining count before deploying.');

@@ -40,6 +40,24 @@ node ../reactory-workflow-es/tools/migrations/m11-version-to-semver.mjs \
 
 Drop `--dry-run` to apply. Other flags: `--table=workflows`, `--collection=workflows`, `--quiet`.
 
+### `--repair-from-id`
+
+The version column went through the old truncating shim (`engineWorkflowMajorVersion`: `"1.0.1"` →
+`1`), so the integer alone cannot recover a non-zero minor or patch — `N` → `"N.0.0"` guesses wrong
+for every such workflow.
+
+`workflowDefinitionId` is a second, lossless record of the same version (`ns.Name@1.0.1`), so where
+it carries one it is **authoritative** and the migration prefers it automatically.
+
+`--repair-from-id` extends that to rows an **earlier** run already converted with the naive rule: it
+rewrites a string version when the id proves it wrong. Off by default, because without it a string
+value is never rewritten and an operator-set version stays safe.
+
+```bash
+node ../../tools/migrations/m11-version-to-semver.mjs \
+  --store=mongo --url="$MONGOOSE" --repair-from-id --dry-run
+```
+
 Exit codes: `0` success (a no-op run included) · `1` usage error · `2` migration failure.
 
 ### Always dry-run first
@@ -82,5 +100,5 @@ matter.
 | Store | Status |
 |---|---|
 | sqlite | **Verified end to end** against a seeded legacy database: column retyped `INTEGER` → `VARCHAR(64)`, values migrated, `definitionFingerprint` added, M2 index and foreign-key rows preserved, dry-run confirmed to write nothing, second run a no-op, pre-existing string version left untouched. |
-| mongo | **Verified end to end** against an isolated probe database: integer versions migrated to `"N.0.0"`, a pre-existing `"1.4.2"` left untouched, second run a no-op, exit `0`. Also dry-run clean against a real dev store (1343 instances). |
+| mongo | **Applied to a real dev store** (`reactory-reactory`, 1459 instances) after a verified `mongodump`: all versions string, 0 numeric, 0 non-semver, second run a no-op, and all 35 definition/version pairs agree. Mapping rules proven separately on an isolated probe: id-embedded semver wins over `N.0.0`, no-semver ids fall back to `N.0.0`, an existing correct string is untouched, and `--repair-from-id` corrects a bad earlier guess and is itself idempotent. |
 | postgres | **Not executed** — no live instance available at authoring time. The `ALTER … USING` and transaction handling are written but unproven. Dry-run first; it is read-only. |
