@@ -154,8 +154,8 @@ deleted. Registry lookup remains **exact string equality** — no range resoluti
 
 | Path | Action | Why |
 |---|---|---|
-| `tools/migrations/m11-version-to-semver.mjs` | create | **Delivered with this spec** — idempotent back-fill for mongo / postgres / sqlite |
-| `tools/migrations/README.md` | create | **Delivered with this spec** — how to run it |
+| `core/tools/migrations/m11-version-to-semver.mjs` | create | **Delivered with this spec** — idempotent back-fill for mongo / postgres / sqlite |
+| `core/tools/migrations/README.md` | create | **Delivered with this spec** — how to run it |
 
 ### `reactory-express-server`
 
@@ -237,7 +237,7 @@ requirement is that the value is a stable, exactly-comparable string.
 | memory | None | Nothing persisted. |
 
 The migration is therefore **mandatory before the code change is deployed**, on every durable store
-that holds rows. `tools/migrations/m11-version-to-semver.mjs` (shipped with this spec) performs it.
+that holds rows. `core/tools/migrations/m11-version-to-semver.mjs` (shipped with this spec) performs it.
 It is idempotent and forward-only: integer `N` becomes the string `"N.0.0"`, which preserves the
 existing `engineWorkflowMajorVersion` semantics exactly, so an instance written as `1` before the
 migration matches a definition declaring `1.0.0` after it. It also adds the missing
@@ -334,7 +334,7 @@ provider is bound by rule §6.6.
   `"1.0.0"` and `"2.0.0"`; assert equal fingerprints. Proves §6.8.
 - **`startWorkflow with an empty or undefined version throws`** — proves §6.9.
 
-### Migration tests — `tools/migrations/__tests__/m11-migration.test.mjs`
+### Migration tests — `core/tools/migrations/__tests__/m11-migration.test.mjs`
 
 - **`sqlite: integer 1 becomes "1.0.0"`** — seed a legacy-shaped table, run, assert.
 - **`sqlite: a second run reports 0 changed`** — proves §6.10.
@@ -348,7 +348,7 @@ provider is bound by rule §6.6.
 cd core && npm test                                   # 267 specs + new scenario
 cd providers/workflow-es-sqlite && npm test           # 93 specs, real SQL round-trip
 cd providers/workflow-es-postgres && npm test         # requires live postgres
-node tools/migrations/m11-version-to-semver.mjs --store=sqlite --path=./tmp.db --dry-run
+node core/tools/migrations/m11-version-to-semver.mjs --store=sqlite --path=./tmp.db --dry-run
 ```
 
 ## 9. Acceptance criteria (binary)
@@ -382,7 +382,7 @@ Consumer impact:
   `reactory-pwa-client` and any external consumer before flipping. If a transition is needed, add a
   `versionString: String!` field first, migrate clients, then flip `version` in a later release.
 - **Data migration is mandatory** on every durable store holding rows, before the deploy. See §5 and
-  `tools/migrations/README.md`.
+  `core/tools/migrations/README.md`.
 
 Rollback: the migration is forward-only. To roll back, restore from backup — do not attempt to coerce
 `"1.0.0"` back to `1`, because any genuine minor/patch version written after the deploy would be

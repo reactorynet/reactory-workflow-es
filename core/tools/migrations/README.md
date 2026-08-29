@@ -5,8 +5,8 @@ step, no framework — because they must be runnable against a production databa
 without the engine loaded.
 
 There is no migration framework in this repo, and the SQL providers call bare `sequelize.sync()`
-([postgres](../../providers/workflow-es-postgres/src/postgres-provider.ts) line 54,
-[sqlite](../../providers/workflow-es-sqlite/src/sqlite-provider.ts) line 77), which **creates missing
+([postgres](../../../providers/workflow-es-postgres/src/postgres-provider.ts) line 54,
+[sqlite](../../../providers/workflow-es-sqlite/src/sqlite-provider.ts) line 77), which **creates missing
 tables and never alters an existing one**. Any change to a persisted column therefore needs a script
 here; it will not happen by itself.
 
@@ -14,7 +14,7 @@ here; it will not happen by itself.
 
 Migrates `workflows.version` from an integer to a semantic-version string (`N` → `"N.0.0"`) and adds
 the M10 `definitionFingerprint` column where it is missing. Required by
-[spec M11](../../docs/specs/m11-semantic-versioning.md).
+[spec M11](../../../docs/specs/m11-semantic-versioning.md).
 
 ### Run it
 
@@ -24,17 +24,17 @@ The driver is resolved from your **current working directory**, so run from a pr
 ```bash
 # SQLite — driver: sqlite3
 cd providers/workflow-es-sqlite
-node ../../tools/migrations/m11-version-to-semver.mjs \
+node ../../core/tools/migrations/m11-version-to-semver.mjs \
   --store=sqlite --path=/data/workflow.db --dry-run
 
 # PostgreSQL — driver: pg
 cd providers/workflow-es-postgres
-node ../../tools/migrations/m11-version-to-semver.mjs \
+node ../../core/tools/migrations/m11-version-to-semver.mjs \
   --store=postgres --url="$WORKFLOW_POSTGRES_URL" --dry-run
 
 # MongoDB — driver: mongodb
 cd ../reactory-express-server
-node ../reactory-workflow-es/tools/migrations/m11-version-to-semver.mjs \
+node ../reactory-workflow-es/core/tools/migrations/m11-version-to-semver.mjs \
   --store=mongo --url="$MONGOOSE" --dry-run
 ```
 
@@ -54,11 +54,28 @@ rewrites a string version when the id proves it wrong. Off by default, because w
 value is never rewritten and an operator-set version stays safe.
 
 ```bash
-node ../../tools/migrations/m11-version-to-semver.mjs \
+node ../../core/tools/migrations/m11-version-to-semver.mjs \
   --store=mongo --url="$MONGOOSE" --repair-from-id --dry-run
 ```
 
 Exit codes: `0` success (a no-op run included) · `1` usage error · `2` migration failure.
+
+### Running it on another instance
+
+This directory ships **inside the `@reactorynet/workflow-es` package**, so any environment
+that has the dependency installed already has the script — no repo checkout needed:
+
+```bash
+cd <that project>            # a dir whose node_modules has the driver (mongodb / pg / sqlite3)
+node node_modules/@reactorynet/workflow-es/tools/migrations/m11-version-to-semver.mjs \
+  --store=mongo --url="$MONGOOSE" --dry-run
+```
+
+The script resolves its database driver from the **current working directory**, which is why
+you run it from the project rather than from inside `node_modules`. It has no dependencies of
+its own, so it also works if you simply copy the single `.mjs` file to the target host.
+
+Run it once per environment (dev / staging / production) — each has its own store.
 
 ### Always dry-run first
 
