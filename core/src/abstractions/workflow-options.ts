@@ -57,4 +57,22 @@ export interface WorkflowOptions {
 
     /** H6 — Maximum serialized byte size for workflow data fields. 0 = unlimited. Default 0. */
     dataCodecMaxBytes: number;
+
+    /**
+     * M10 — What to do when a loaded instance's `definitionFingerprint` does not match
+     * the fingerprint of the currently registered definition (i.e. the step graph was
+     * edited without a version bump).
+     *
+     *  - `"enforce"` (default) — dead-letter the instance. Correct for production: the
+     *    ordinal `stepId` on its pointers no longer refers to the step it suspended at,
+     *    so executing it runs the WRONG step body.
+     *  - `"warn"` — log at Error and execute anyway. A rollout escape hatch: deploy,
+     *    measure how many instances would be affected, then move to `"enforce"`.
+     *    Leaves the silent-deviation hazard open while it is set.
+     *  - `"off"` — skip the check entirely.
+     *
+     * Instances started before fingerprinting existed carry no fingerprint and are
+     * exempt under every mode — an absent value is never a mismatch.
+     */
+    definitionFingerprintMode: "enforce" | "warn" | "off";
 }

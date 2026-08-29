@@ -9,7 +9,7 @@ export interface DataCodecContext {
     /** Workflow definition id, when known (instance.data path). Optional. */
     workflowDefinitionId?: string;
     /** Workflow definition version, when known. Optional. */
-    version?: number;
+    version?: string;
     /** Event name, when known (event.data path). Optional. NEVER itself encoded. */
     eventName?: string;
 }

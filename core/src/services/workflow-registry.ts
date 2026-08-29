@@ -7,10 +7,14 @@ import { WorkflowBuilder } from "../fluent-builders";
 export class WorkflowRegistry implements IWorkflowRegistry {
     private registry: RegistryEntry[] = [];
 
-    public getDefinition(id: string, version: number): WorkflowDefinition {
+    public getDefinition(id: string, version: string): WorkflowDefinition {
         const def = this.tryGetDefinition(id, version);
         if (!def)
-            throw new Error(`Workflow not registered: ${id}@${version}`);
+            // Render id and version as separate labelled fields rather than `${id}@${version}`.
+            // Consumers conventionally embed the version in the id itself
+            // ("ns.Name@1.0.0"), so the concatenated form produced a confusing
+            // "ns.Name@9.9.9@9.9.9" and hid which half of the key actually missed.
+            throw new Error(`Workflow not registered: id="${id}" version="${version}"`);
         return def;
     }
 
@@ -19,7 +23,7 @@ export class WorkflowRegistry implements IWorkflowRegistry {
      * Used by the executor at load time so a missing (id, version) pair can be
      * dead-lettered cleanly instead of propagating an exception.
      */
-    public tryGetDefinition(id: string, version: number): WorkflowDefinition | undefined {
+    public tryGetDefinition(id: string, version: string): WorkflowDefinition | undefined {
         const item = this.registry.find(x => x.id === id && x.version === version);
         return item ? item.defintion : undefined;
     }
@@ -30,13 +34,15 @@ export class WorkflowRegistry implements IWorkflowRegistry {
         entry.version = workflow.version;
         const builder = new WorkflowBuilder<TData>();
         workflow.build(builder);
-        entry.defintion = builder.build(workflow.id, workflow.version);
+        // M10 — the seed (when the workflow supplies one) is folded into the definition
+        // fingerprint so a content-only edit to a generated workflow is still detected.
+        entry.defintion = builder.build(workflow.id, workflow.version, workflow.fingerprintSeed);
         this.registry.push(entry);
     }
 }
 
 class RegistryEntry {
     public id: string;
-    public version: number;
+    public version: string;
     public defintion: WorkflowDefinition;
 }

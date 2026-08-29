@@ -93,10 +93,11 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             beforeAll(async () => {
                 instance = new WorkflowInstance();
                 instance.workflowDefinitionId = "conf-wf-1";
-                instance.version = 1;
+                instance.version = "1.0.0";
                 instance.status = WorkflowStatus.Runnable;
                 instance.nextExecution = 0;
                 instance.data = { step: "init" };
+                instance.definitionFingerprint = "0123456789abcdef0123456789abcdef";
                 returnedId = await provider.createNewWorkflow(instance);
             });
 
@@ -113,10 +114,32 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 const loaded = await provider.getWorkflowInstance(returnedId);
                 expect(loaded).toBeDefined();
                 expect(loaded.workflowDefinitionId).toEqual("conf-wf-1");
-                expect(loaded.version).toEqual(1);
+                expect(loaded.version).toEqual("1.0.0");
                 expect(loaded.status).toEqual(WorkflowStatus.Runnable);
                 expect(loaded.nextExecution).toEqual(0);
                 expect(loaded.data).toEqual({ step: "init" });
+            });
+
+            // M10 — the fingerprint pins an instance to the graph it started on. A
+            // provider that drops it silently disables the guarantee for every instance
+            // it stores, so round-tripping it is part of the contract.
+            it("round-trips definitionFingerprint (M10)", async () => {
+                const loaded = await provider.getWorkflowInstance(returnedId);
+                expect(loaded.definitionFingerprint).toEqual("0123456789abcdef0123456789abcdef");
+            });
+
+            // M10 — pre-M10 rows carry no fingerprint and MUST stay exempt. A provider
+            // that materialises null/"" as something else would dead-letter legacy work.
+            it("round-trips an ABSENT definitionFingerprint as falsy, never as a value (M10)", async () => {
+                const legacy = new WorkflowInstance();
+                legacy.workflowDefinitionId = "conf-wf-1-legacy";
+                legacy.version = "1.0.0";
+                legacy.status = WorkflowStatus.Runnable;
+                legacy.nextExecution = 0;
+                legacy.data = {};
+                const legacyId = await provider.createNewWorkflow(legacy);
+                const loaded = await provider.getWorkflowInstance(legacyId);
+                expect(loaded.definitionFingerprint).toBeFalsy();
             });
         });
 
@@ -128,7 +151,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             beforeAll(async () => {
                 const wf = new WorkflowInstance();
                 wf.workflowDefinitionId = "conf-wf-scalars";
-                wf.version = 1;
+                wf.version = "1.0.0";
                 wf.status = WorkflowStatus.Runnable;
                 wf.nextExecution = 0;
                 wf.data = { v: 1 };
@@ -160,7 +183,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             beforeAll(async () => {
                 const wf = new WorkflowInstance();
                 wf.workflowDefinitionId = "conf-wf-ptrs";
-                wf.version = 1;
+                wf.version = "1.0.0";
                 wf.status = WorkflowStatus.Runnable;
                 wf.nextExecution = 0;
                 wf.data = {};
@@ -210,7 +233,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 // Runnable with past nextExecution
                 const runnable = new WorkflowInstance();
                 runnable.workflowDefinitionId = "conf-runnable";
-                runnable.version = 1;
+                runnable.version = "1.0.0";
                 runnable.status = WorkflowStatus.Runnable;
                 runnable.nextExecution = 0; // epoch — definitely in the past
                 runnable.data = {};
@@ -220,7 +243,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 // Runnable but future nextExecution — should NOT appear
                 const future = new WorkflowInstance();
                 future.workflowDefinitionId = "conf-future";
-                future.version = 1;
+                future.version = "1.0.0";
                 future.status = WorkflowStatus.Runnable;
                 future.nextExecution = Date.now() + 60_000;
                 future.data = {};
@@ -230,7 +253,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 // Complete — should NOT appear
                 const complete = new WorkflowInstance();
                 complete.workflowDefinitionId = "conf-complete";
-                complete.version = 1;
+                complete.version = "1.0.0";
                 complete.status = WorkflowStatus.Complete;
                 complete.nextExecution = 0;
                 complete.data = {};
@@ -263,7 +286,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             beforeAll(async () => {
                 wfBase = new WorkflowInstance();
                 wfBase.workflowDefinitionId = "conf-sub-base";
-                wfBase.version = 1;
+                wfBase.version = "1.0.0";
                 wfBase.status = WorkflowStatus.Runnable;
                 wfBase.nextExecution = 0;
                 wfBase.data = {};
@@ -458,7 +481,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
             async function makeWorkflow(): Promise<WorkflowInstance> {
                 const wf = new WorkflowInstance();
                 wf.workflowDefinitionId = "conf-cas";
-                wf.version = 1;
+                wf.version = "1.0.0";
                 wf.status = WorkflowStatus.Runnable;
                 wf.nextExecution = 0;
                 wf.data = { n: 0 };
@@ -617,7 +640,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 const wfA = new WorkflowInstance();
                 wfA.tenantId = "tenant-A";
                 wfA.workflowDefinitionId = "m6-runnable";
-                wfA.version = 1;
+                wfA.version = "1.0.0";
                 wfA.status = WorkflowStatus.Runnable;
                 wfA.nextExecution = 0;
                 wfA.data = {};
@@ -626,7 +649,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 const wfB = new WorkflowInstance();
                 wfB.tenantId = "tenant-B";
                 wfB.workflowDefinitionId = "m6-runnable";
-                wfB.version = 1;
+                wfB.version = "1.0.0";
                 wfB.status = WorkflowStatus.Runnable;
                 wfB.nextExecution = 0;
                 wfB.data = {};
@@ -676,7 +699,7 @@ export function runPersistenceProviderConformanceTests(options: PersistenceConfo
                 const wf = new WorkflowInstance();
                 if (spec.tenantId !== undefined) wf.tenantId = spec.tenantId;
                 wf.workflowDefinitionId = spec.workflowDefinitionId;
-                wf.version = 1;
+                wf.version = "1.0.0";
                 wf.description = spec.description;
                 wf.status = spec.status;
                 wf.nextExecution = 0;

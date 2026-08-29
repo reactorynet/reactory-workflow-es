@@ -45,7 +45,7 @@ class MyData {
  */
 class RestartWorkflow implements WorkflowBase<MyData> {
     public id: string = "restart-workflow";
-    public version: number = 1;
+    public version: string = "1.0.0";
 
     public build(builder: WorkflowBuilder<MyData>): void {
         builder
@@ -108,7 +108,7 @@ describe("sqlite-restart", () => {
         host1.registerWorkflow(RestartWorkflow);
         await host1.start();
 
-        workflowId = await host1.startWorkflow("restart-workflow", 1, new MyData());
+        workflowId = await host1.startWorkflow("restart-workflow", "1.0.0", new MyData());
 
         // Wait until the subscription for "resume-event" exists on disk — proves state hit disk.
         await spinWait(async () => {

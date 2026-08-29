@@ -38,7 +38,7 @@ describe("foreach scenario", () => {
 
     class Foreach_Workflow implements WorkflowBase<any> {
         public id: string = "foreach-scenario-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -61,7 +61,7 @@ describe("foreach scenario", () => {
     beforeAll(async () => {
         host.registerWorkflow(Foreach_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("foreach-scenario-workflow", 1, {});
+        workflowId = await host.startWorkflow("foreach-scenario-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);

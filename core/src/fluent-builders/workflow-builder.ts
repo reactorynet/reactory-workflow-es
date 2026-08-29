@@ -2,6 +2,9 @@ import { StepBody, InlineStepBody } from "../abstractions";
 import { WorkflowDefinition, WorkflowStepBase, WorkflowStep, StepOutcome, StepExecutionContext, ExecutionResult, WorkflowErrorHandling } from "../models";
 import { WaitFor, Foreach, While, If, Delay, Schedule } from "../primitives";
 import { StepBuilder } from "./step-builder";
+// Direct file import (not the ../services barrel) — the barrel pulls in workflow-host,
+// which imports the fluent builders, and that would close an import cycle.
+import { computeDefinitionFingerprint } from "../services/definition-fingerprint";
 
 export class WorkflowBuilder<TData> {
     
@@ -10,7 +13,12 @@ export class WorkflowBuilder<TData> {
     public retryInterval : number = (60 * 1000);
     public maxRetries? : number;        // undefined => WorkflowOptions.retry.defaultMaxRetries
 
-    public build(id: string, version: number): WorkflowDefinition {
+    /**
+     * @param fingerprintSeed M10 — optional content digest folded into the definition
+     *        fingerprint, for definitions generated from an external source. See
+     *        `WorkflowBase.fingerprintSeed`.
+     */
+    public build(id: string, version: string, fingerprintSeed?: string): WorkflowDefinition {
         var result = new WorkflowDefinition();
         result.id = id;
         result.version = version;
@@ -18,6 +26,9 @@ export class WorkflowBuilder<TData> {
         result.errorBehavior = this.errorBehavior;
         result.retryInterval = this.retryInterval;
         result.maxRetries = this.maxRetries;
+        // M10 — computed once, after the graph is complete, so the hash covers the
+        // final wiring rather than a partially built chain.
+        result.fingerprint = computeDefinitionFingerprint(this.steps, fingerprintSeed);
 
         return result;
     }

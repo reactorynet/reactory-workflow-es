@@ -36,6 +36,17 @@ function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
     const defaultRetryIntervalMs = requirePositiveInteger("retry.defaultRetryIntervalMs", partial?.retry?.defaultRetryIntervalMs ?? 60000);
     const stepNotFoundRetryIntervalMs = requirePositiveInteger("retry.stepNotFoundRetryIntervalMs", partial?.retry?.stepNotFoundRetryIntervalMs ?? 60000);
 
+    // M10 — definition-fingerprint enforcement. Defaults to "enforce": instances predating
+    // fingerprinting carry none and are exempt, so the strict default cannot retroactively
+    // dead-letter existing work — it only refuses to run an instance against a graph that
+    // provably changed under it.
+    const definitionFingerprintMode = partial?.definitionFingerprintMode ?? "enforce";
+    if (definitionFingerprintMode !== "enforce" && definitionFingerprintMode !== "warn" && definitionFingerprintMode !== "off") {
+        throw new Error(
+            `Invalid definitionFingerprintMode ${String(definitionFingerprintMode)}: must be "enforce", "warn" or "off".`
+        );
+    }
+
     // Remaining fields are declared but not yet consumed by their owning items (H6).
     // Defaults are applied here so the interface is stable and downstream items can wire them
     // without changing this function's signature.
@@ -54,6 +65,7 @@ function resolveOptions(partial?: Partial<WorkflowOptions>): WorkflowOptions {
             stepNotFoundRetryIntervalMs,
         },
         dataCodecMaxBytes: partial?.dataCodecMaxBytes ?? 0,
+        definitionFingerprintMode,
     };
 }
 

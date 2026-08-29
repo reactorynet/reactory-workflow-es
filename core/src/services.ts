@@ -17,3 +17,5 @@ export * from "./services/no-op-metrics";
 export * from "./services/no-op-tracer";
 export * from "./services/null-data-codec";
 export * from "./services/data-codec-runner";
+export * from "./services/definition-fingerprint";
+

@@ -41,7 +41,7 @@ import { spinWait } from "../helpers/spin-wait";
 
      class Parallel_Workflow implements WorkflowBase<any> {
          public id: string = "parallel-workflow";
-         public version: number = 1;
+         public version: string = "1.0.0";
 
          public build(builder: WorkflowBuilder<any>) {        
              builder
@@ -72,7 +72,7 @@ import { spinWait } from "../helpers/spin-wait";
         host.registerWorkflow(Parallel_Workflow);
         await host.start();
 
-        workflowId = await host.startWorkflow("parallel-workflow", 1, null);
+        workflowId = await host.startWorkflow("parallel-workflow", "1.0.0", null);
 
         await spinWait(async () => {
             let subs = await persistence.getSubscriptions(DEFAULT_TENANT, "my-event", "0", new Date());

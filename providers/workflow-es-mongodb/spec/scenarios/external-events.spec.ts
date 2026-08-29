@@ -17,7 +17,7 @@ import { spinWaitCallback, spinWait } from "../helpers/spin-wait";
 
      class Event_Workflow implements WorkflowBase<MyDataClass> {    
          public id: string = "event-workflow";
-         public version: number = 1;
+         public version: string = "1.0.0";
 
          public build(builder: WorkflowBuilder<MyDataClass>) {        
              builder
@@ -40,7 +40,7 @@ import { spinWaitCallback, spinWait } from "../helpers/spin-wait";
         host.registerWorkflow(Event_Workflow);
         await host.start();
 
-        workflowId = await host.startWorkflow("event-workflow", 1, { value1: 2, value2: 3 });
+        workflowId = await host.startWorkflow("event-workflow", "1.0.0", { value1: 2, value2: 3 });
 
         await spinWait(async () => {
             let subs = await persistence.getSubscriptions("my-event", "0", new Date());

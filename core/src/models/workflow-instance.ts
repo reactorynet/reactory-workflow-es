@@ -11,7 +11,8 @@ export class WorkflowInstance {
      */
     public tenantId : string;
     public workflowDefinitionId : string;
-    public version : number;
+    /** M11 — semantic version of the definition this instance runs. Immutable once set. */
+    public version : string;
     public description : string;
     public nextExecution : number;
     public status : number;
@@ -31,6 +32,23 @@ export class WorkflowInstance {
      * before this field existed.
      */
     public concurrencyToken?: number = 0;
+
+    /**
+     * M10 — Fingerprint of the definition graph this instance was STARTED on, copied
+     * from `WorkflowDefinition.fingerprint` by the host in startWorkflow and never
+     * mutated afterwards.
+     *
+     * On every load the executor compares it against the currently registered
+     * definition's fingerprint. A mismatch means the graph was edited without a version
+     * bump, so the ordinal `stepId` on this instance's pointers no longer refers to the
+     * step it was suspended at; the instance is dead-lettered instead of executed.
+     *
+     * Optional and nullable BY DESIGN: rows written before this field existed carry no
+     * fingerprint, and those instances must keep running. An absent value on either the
+     * instance or the definition disables the check for that instance — it is never
+     * treated as a mismatch. See `services/definition-fingerprint.ts`.
+     */
+    public definitionFingerprint?: string;
 
     constructor() {
 

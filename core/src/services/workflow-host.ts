@@ -156,7 +156,7 @@ export class WorkflowHost implements IWorkflowHost {
         return configured;
     }
     
-    public async startWorkflow(id: string, version: number, data: any = {}, tenantId: string = DEFAULT_TENANT): Promise<string> {
+    public async startWorkflow(id: string, version: string, data: any = {}, tenantId: string = DEFAULT_TENANT): Promise<string> {
         let self = this;
         let def = self.registry.getDefinition(id, version);
         let wf = new WorkflowInstance();
@@ -166,6 +166,9 @@ export class WorkflowHost implements IWorkflowHost {
         wf.description = def.description;
         wf.workflowDefinitionId = def.id;
         wf.version = def.version;
+        // M10 — pin the instance to the graph it is starting on. Immutable for the life
+        // of the instance; the executor re-checks it on every load.
+        wf.definitionFingerprint = def.fingerprint;
         wf.nextExecution = 0;
         wf.createTime = new Date();
         wf.status = WorkflowStatus.Runnable;

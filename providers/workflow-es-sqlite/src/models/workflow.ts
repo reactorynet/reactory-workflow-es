@@ -33,8 +33,11 @@ export class Workflow extends Model {
     @Column(DataType.STRING)
     workflowDefinitionId: string;
 
-    @Column(DataType.INTEGER)
-    version: number;
+    // M11 — semantic version string ("major.minor.patch"). Was INTEGER; an existing
+    // table is NOT altered by sequelize.sync(), so a deployed store must be migrated by
+    // tools/migrations/m11-version-to-semver.mjs BEFORE this code runs.
+    @Column(DataType.STRING)
+    version: string;
 
     @Column(DataType.STRING)
     description: string;
@@ -70,6 +73,12 @@ export class Workflow extends Model {
     @Default(0)
     @Column(DataType.INTEGER)
     concurrencyToken: number;
+
+    // M10 — fingerprint of the definition graph the instance was STARTED on. Nullable
+    // by design: rows written before M10 carry NULL and are exempt from the check, so
+    // the column needs no backfill and no default.
+    @Column(DataType.STRING)
+    definitionFingerprint: string;
 
     @HasMany(() => ExecutionPointer)
     executionPointers: ExecutionPointer[];

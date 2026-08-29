@@ -28,7 +28,7 @@ class BlockingStep extends StepBody {
 
 class BlockingWorkflow implements WorkflowBase<any> {
     public id: string = "graceful-shutdown-blocking";
-    public version: number = 1;
+    public version: string = "1.0.0";
     public build(builder: WorkflowBuilder<any>) {
         builder.startWith(BlockingStep);
     }
@@ -79,7 +79,7 @@ describe("graceful shutdown", () => {
     it("stop() awaits an in-flight execution before resolving", async () => {
         const { host, persistence } = buildHost();
         await host.start();
-        const workflowId = await host.startWorkflow("graceful-shutdown-blocking", 1, {});
+        const workflowId = await host.startWorkflow("graceful-shutdown-blocking", "1.0.0", {});
         await spinWait(async () => gate.entered);
 
         let stopResolved = false;
@@ -100,7 +100,7 @@ describe("graceful shutdown", () => {
     it("SIGTERM mid-execution drains the active workflow to a consistent state within the timeout", async () => {
         const { host, persistence } = buildHost({ gracefulShutdownTimeoutMs: 5000 });
         await host.start();
-        const workflowId = await host.startWorkflow("graceful-shutdown-blocking", 1, {});
+        const workflowId = await host.startWorkflow("graceful-shutdown-blocking", "1.0.0", {});
         await spinWait(async () => gate.entered);
 
         // Fire the registered SIGTERM handler (does not signal the OS).
@@ -118,7 +118,7 @@ describe("graceful shutdown", () => {
         const lock = new TestLockProvider();
         const { host } = buildHost({ gracefulShutdownTimeoutMs: 5000 }, lock);
         await host.start();
-        const workflowId = await host.startWorkflow("graceful-shutdown-blocking", 1, {});
+        const workflowId = await host.startWorkflow("graceful-shutdown-blocking", "1.0.0", {});
         await spinWait(async () => gate.entered);
 
         // M6: the worker namespaces lock keys by tenant; a single-tenant flow
@@ -140,7 +140,7 @@ describe("graceful shutdown", () => {
     it("force-stop after timeout resolves without hanging", async () => {
         const { host } = buildHost({ gracefulShutdownTimeoutMs: 300 });
         await host.start();
-        await host.startWorkflow("graceful-shutdown-blocking", 1, {});
+        await host.startWorkflow("graceful-shutdown-blocking", "1.0.0", {});
         await spinWait(async () => gate.entered);
 
         const t0 = Date.now();
@@ -155,7 +155,7 @@ describe("graceful shutdown", () => {
     it("stop resolves even if an in-flight execution throws", async () => {
         const { host } = buildHost({ gracefulShutdownTimeoutMs: 5000 });
         await host.start();
-        await host.startWorkflow("graceful-shutdown-blocking", 1, {});
+        await host.startWorkflow("graceful-shutdown-blocking", "1.0.0", {});
         await spinWait(async () => gate.entered);
 
         const stopPromise = host.stop();

@@ -22,7 +22,7 @@ describe("delay scenario", () => {
 
     class Delay_Workflow implements WorkflowBase<any> {
         public id: string = "delay-scenario-workflow";
-        public version: number = 1;
+        public version: string = "1.0.0";
 
         public build(builder: WorkflowBuilder<any>) {
             builder
@@ -43,7 +43,7 @@ describe("delay scenario", () => {
     beforeAll(async () => {
         host.registerWorkflow(Delay_Workflow);
         await host.start();
-        workflowId = await host.startWorkflow("delay-scenario-workflow", 1, {});
+        workflowId = await host.startWorkflow("delay-scenario-workflow", "1.0.0", {});
         await spinWait(async () => {
             instance = await persistence.getWorkflowInstance(workflowId);
             return (instance.status != WorkflowStatus.Runnable);

@@ -25,7 +25,7 @@
   "license": "MIT",
   "devDependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@reactorynet/workflow-es": "2.6.0",
+    "@reactorynet/workflow-es": "3.0.0",
     "@types/jasmine": "^4.6.0",
     "@types/node": "^20.0.0",
     "jasmine": "^5.0.0",
@@ -35,7 +35,7 @@
   },
   "peerDependencies": {
     "@opentelemetry/api": ">=1.0.0 <2.0.0",
-    "@reactorynet/workflow-es": "2.6.0",
+    "@reactorynet/workflow-es": "3.0.0",
     "inversify": "^6.0.0",
     "reflect-metadata": "^0.2.0"
   },

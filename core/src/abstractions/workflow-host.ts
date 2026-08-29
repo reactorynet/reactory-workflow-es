@@ -19,7 +19,7 @@ export interface IWorkflowHost {
      * "default" (DEFAULT_TENANT); existing 3-arg callers are unaffected. The
      * tenant is stamped onto the created WorkflowInstance.
      */
-    startWorkflow(id: string, version: number, data: any, tenantId?: string): Promise<string>;
+    startWorkflow(id: string, version: string, data: any, tenantId?: string): Promise<string>;
     registerWorkflow<TData>(workflow: new () => WorkflowBase<TData>): void;
     /**
      * Publish an external event. M6: `tenantId` is OPTIONAL and defaults to

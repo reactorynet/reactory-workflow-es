@@ -39,7 +39,7 @@ class SetSecretStep extends StepBody {
 
 class SecretWorkflow implements WorkflowBase<any> {
     public id: string = "data-codec-secret-workflow";
-    public version: number = 1;
+    public version: string = "1.0.0";
     public build(builder: WorkflowBuilder<any>) {
         builder.startWith(SetSecretStep);
     }
@@ -53,7 +53,7 @@ class WaitStep extends StepBody {
 
 class WaitWorkflow implements WorkflowBase<any> {
     public id: string = "data-codec-wait-workflow";
-    public version: number = 1;
+    public version: string = "1.0.0";
     public build(builder: WorkflowBuilder<any>) {
         builder
             .startWith(WaitStep)
@@ -75,7 +75,7 @@ describe("H6 at-rest data codec", () => {
         beforeAll(async () => {
             host.registerWorkflow(SecretWorkflow);
             await host.start();
-            workflowId = await host.startWorkflow("data-codec-secret-workflow", 1, {});
+            workflowId = await host.startWorkflow("data-codec-secret-workflow", "1.0.0", {});
             await spinWait(async () => {
                 let i = await persistence.getWorkflowInstance(workflowId);
                 return i && i.status !== WorkflowStatus.Runnable;
@@ -122,7 +122,7 @@ describe("H6 at-rest data codec", () => {
         beforeAll(async () => {
             host.registerWorkflow(WaitWorkflow);
             await host.start();
-            workflowId = await host.startWorkflow("data-codec-wait-workflow", 1, {});
+            workflowId = await host.startWorkflow("data-codec-wait-workflow", "1.0.0", {});
             await spinWait(async () => {
                 let subs = await persistence.getSubscriptions(DEFAULT_TENANT, "dc-event", "0", new Date());
                 return subs.length > 0;
@@ -170,7 +170,7 @@ describe("H6 at-rest data codec", () => {
         beforeAll(async () => {
             host.registerWorkflow(SecretWorkflow);
             await host.start();
-            workflowId = await host.startWorkflow("data-codec-secret-workflow", 1, {});
+            workflowId = await host.startWorkflow("data-codec-secret-workflow", "1.0.0", {});
             await spinWait(async () => {
                 let i = await persistence.getWorkflowInstance(workflowId);
                 return i && i.status !== WorkflowStatus.Runnable;
@@ -205,7 +205,7 @@ describe("H6 at-rest data codec", () => {
             const big = { blob: "x".repeat(500) };
             let error: any = null;
             try {
-                await host.startWorkflow("data-codec-secret-workflow", 1, big);
+                await host.startWorkflow("data-codec-secret-workflow", "1.0.0", big);
             }
             catch (err) {
                 error = err;
@@ -232,7 +232,7 @@ describe("H6 at-rest data codec", () => {
         it("surfaces the encode error to startWorkflow", async () => {
             let error: any = null;
             try {
-                await host.startWorkflow("data-codec-secret-workflow", 1, {});
+                await host.startWorkflow("data-codec-secret-workflow", "1.0.0", {});
             }
             catch (err) {
                 error = err;
