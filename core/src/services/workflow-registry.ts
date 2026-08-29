@@ -10,7 +10,11 @@ export class WorkflowRegistry implements IWorkflowRegistry {
     public getDefinition(id: string, version: string): WorkflowDefinition {
         const def = this.tryGetDefinition(id, version);
         if (!def)
-            throw new Error(`Workflow not registered: ${id}@${version}`);
+            // Render id and version as separate labelled fields rather than `${id}@${version}`.
+            // Consumers conventionally embed the version in the id itself
+            // ("ns.Name@1.0.0"), so the concatenated form produced a confusing
+            // "ns.Name@9.9.9@9.9.9" and hid which half of the key actually missed.
+            throw new Error(`Workflow not registered: id="${id}" version="${version}"`);
         return def;
     }
 

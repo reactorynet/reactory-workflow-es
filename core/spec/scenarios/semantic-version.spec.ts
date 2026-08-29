@@ -173,9 +173,19 @@ describe("M11 — version matching is exact string equality", () => {
         expect(registry.tryGetDefinition("semver.Exact", 1 as any)).toBeUndefined();
     });
 
-    it("throws on a miss via getDefinition, rendering the version as a string", () => {
+    it("throws on a miss via getDefinition, labelling id and version separately", () => {
+        // Ids conventionally embed the version ("ns.Name@1.0.0"), so the message must
+        // NOT concatenate them again — that produced "ns.Name@9.9.9@9.9.9".
         expect(() => registry.getDefinition("semver.Exact", "9.9.9"))
-            .toThrowError(/semver\.Exact@9\.9\.9/);
+            .toThrowError(/id="semver\.Exact" version="9\.9\.9"/);
+    });
+
+    it("does not double the version when the id already embeds one", () => {
+        let message = "";
+        try { registry.getDefinition("semver.Exact@9.9.9", "9.9.9"); }
+        catch (err) { message = (err as Error).message; }
+        expect(message).toContain('id="semver.Exact@9.9.9"');
+        expect(message).not.toContain("@9.9.9@9.9.9");
     });
 });
 
