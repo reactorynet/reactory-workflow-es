@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es-opentelemetry",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Optional OpenTelemetry metrics/tracing adapter for Workflow ES (Reactory fork)",
   "main": "./build/index.js",
   "typings": "./build/index.d.ts",

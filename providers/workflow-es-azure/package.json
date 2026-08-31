@@ -1,6 +1,6 @@
 {
   "name": "@reactorynet/workflow-es-azure",
-  "version": "2.5.0",
+  "version": "3.0.0",
   "description": "Azure Storage distributed lock + queue providers for Workflow ES (Reactory fork)",
   "main": "./build/src/index.js",
   "typings": "./build/src/index.d.ts",
