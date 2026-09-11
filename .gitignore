@@ -257,3 +257,4 @@ ModelManifest.xml
 
 # Claude Code agent worktrees (ephemeral; auto-created for parallel agent runs)
 .claude/worktrees/
+.DS_Store
