@@ -22,6 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Corepack first: this repo pins packageManager: yarn@4.x, and both
+      # setup-node's Yarn cache lookup and the install step itself run `yarn`.
+      # The runner's global Yarn 1 abstains with "this project's package.json
+      # defines packageManager: yarn@4.15.0" and the job dies before install.
+      - name: Enable Corepack (Yarn 4)
+        run: corepack enable
+
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -128,6 +135,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Corepack first: same reason as build-and-test — packageManager pins
+      # yarn@4.x, and the providers job shells into core/ to build it.
+      - name: Enable Corepack (Yarn 4)
+        run: corepack enable
 
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4

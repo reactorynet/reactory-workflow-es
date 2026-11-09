@@ -30,6 +30,33 @@ function normalisePlan(plan: string): string {
     return plan.toLowerCase();
 }
 
+/**
+ * Run EXPLAIN with sequential scans disabled for the duration of the
+ * statement.
+ *
+ * These tables hold only a few thousand rows in CI, so the planner
+ * legitimately prefers a Seq Scan on cost grounds even when a perfectly
+ * usable index exists. That made the "planner picks the index" assertions
+ * depend on table statistics rather than on the index itself, and they
+ * flapped red as soon as the row counts changed.
+ *
+ * SET LOCAL inside a transaction is the deterministic way to assert that the
+ * index can serve the query: it is scoped to the transaction, so it cannot
+ * leak onto another pooled connection.
+ */
+async function explainIndexPlan(provider: any, sql: string): Promise<{ "QUERY PLAN": string }> {
+    return provider.sequelize.transaction(async (t: any) => {
+        await provider.sequelize.query("SET LOCAL enable_seqscan = off", { transaction: t });
+        // EXPLAIN emits one row per plan node. A bitmap plan puts
+        // "Bitmap Heap Scan" first and "Bitmap Index Scan on <idx>" second, so
+        // reading only the first row hides the index that was actually used.
+        // Join every row and let the assertions scan the whole plan.
+        const [rows] = await provider.sequelize.query(`EXPLAIN ${sql}`, { transaction: t });
+        const lines = (rows as Array<{ "QUERY PLAN": string }>).map((r) => r["QUERY PLAN"]);
+        return { "QUERY PLAN": lines.join("\n") };
+    });
+}
+
 describe("postgres index presence and EXPLAIN verification (M2)", () => {
     let provider: PostgresPersistence;
     let skipped: boolean;
@@ -125,7 +152,10 @@ describe("postgres index presence and EXPLAIN verification (M2)", () => {
                         ? WorkflowStatus.Runnable   // 10 % are Runnable-and-due
                         : WorkflowStatus.Complete,
                     nextExecution: global % 10 === 0 ? Date.now() - 1000 : null,
-                    data: {},
+                    // bulkInsert bypasses model serialisation, so the JSONB value
+                    // must be pre-stringified; a raw {} makes Sequelize throw
+                    // "Invalid value {}" while escaping the statement.
+                    data: JSON.stringify({}),
                     concurrencyToken: 0
                 });
             }
@@ -133,9 +163,11 @@ describe("postgres index presence and EXPLAIN verification (M2)", () => {
             await provider.sequelize.getQueryInterface().bulkInsert("workflows", rows as any);
         }
 
-        const [[planRow]] = await provider.sequelize.query(
-            `EXPLAIN SELECT id FROM workflows WHERE status = ${WorkflowStatus.Runnable} AND "nextExecution" < ${Date.now()}`
-        ) as [Array<{ "QUERY PLAN": string }>, unknown];
+        // Refresh planner statistics — without ANALYZE the estimate is still
+        // based on the pre-seed row count and the planner picks a Seq Scan.
+        await provider.sequelize.query("ANALYZE workflows");
+
+        const planRow = await explainIndexPlan(provider, `SELECT id FROM workflows WHERE status = ${WorkflowStatus.Runnable} AND "nextExecution" < ${Date.now()}`);
 
         const plan = normalisePlan(planRow["QUERY PLAN"]);
         // Accept "index scan" or "bitmap index scan"; reject "seq scan on workflows".
@@ -165,9 +197,9 @@ describe("postgres index presence and EXPLAIN verification (M2)", () => {
         }
         await provider.sequelize.getQueryInterface().bulkInsert("events", rows as any);
 
-        const [[planRow]] = await provider.sequelize.query(
-            `EXPLAIN SELECT id FROM events WHERE "tenantId" = 'default' AND "eventName" = 'target-event' AND "eventKey" = 'target-key' AND "eventTime" >= '${new Date(0).toISOString()}'`
-        ) as [Array<{ "QUERY PLAN": string }>, unknown];
+        await provider.sequelize.query("ANALYZE events");
+
+        const planRow = await explainIndexPlan(provider, `SELECT id FROM events WHERE "tenantId" = 'default' AND "eventName" = 'target-event' AND "eventKey" = 'target-key' AND "eventTime" >= '${new Date(0).toISOString()}'`);
 
         const plan = normalisePlan(planRow["QUERY PLAN"]);
         const hasIndexScan = plan.includes("index scan") || plan.includes("bitmap index scan");
@@ -182,9 +214,7 @@ describe("postgres index presence and EXPLAIN verification (M2)", () => {
         if (skipped) { pending("WORKFLOW_ES_PG_TEST_URL not set — skipping live Postgres test"); return; }
 
         // Events table already has rows from the previous test.
-        const [[planRow]] = await provider.sequelize.query(
-            `EXPLAIN SELECT id FROM events WHERE "isProcessed" = false AND "eventTime" <= '${new Date().toISOString()}'`
-        ) as [Array<{ "QUERY PLAN": string }>, unknown];
+        const planRow = await explainIndexPlan(provider, `SELECT id FROM events WHERE "isProcessed" = false AND "eventTime" <= '${new Date().toISOString()}'`);
 
         const plan = normalisePlan(planRow["QUERY PLAN"]);
         const hasIndexScan = plan.includes("index scan") || plan.includes("bitmap index scan");
@@ -213,9 +243,9 @@ describe("postgres index presence and EXPLAIN verification (M2)", () => {
         }
         await provider.sequelize.getQueryInterface().bulkInsert("subscriptions", rows as any);
 
-        const [[planRow]] = await provider.sequelize.query(
-            `EXPLAIN SELECT id FROM subscriptions WHERE "tenantId" = 'default' AND "eventName" = 'target-event' AND "eventKey" = 'target-key' AND "subscribeAsOf" <= '${new Date().toISOString()}'`
-        ) as [Array<{ "QUERY PLAN": string }>, unknown];
+        await provider.sequelize.query("ANALYZE subscriptions");
+
+        const planRow = await explainIndexPlan(provider, `SELECT id FROM subscriptions WHERE "tenantId" = 'default' AND "eventName" = 'target-event' AND "eventKey" = 'target-key' AND "subscribeAsOf" <= '${new Date().toISOString()}'`);
 
         const plan = normalisePlan(planRow["QUERY PLAN"]);
         const hasIndexScan = plan.includes("index scan") || plan.includes("bitmap index scan");
