@@ -36,8 +36,11 @@ export class Subscription extends Model {
     @Column(DataType.STRING)
     eventName: string;
 
-    @Column(DataType.JSONB)
-    eventKey: any;
+    // A plain string key, matching EventModel.eventKey. This was JSONB, which
+    // made every insert fail with "invalid input syntax for type json" and
+    // broke getSubscriptions() — the provider queries it by string equality.
+    @Column(DataType.STRING)
+    eventKey: string;
 
     @Column(DataType.DATE)
     subscribeAsOf: Date;
