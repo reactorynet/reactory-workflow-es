@@ -11,7 +11,6 @@ export class AzureQueueProvider implements IQueueProvider {
     private visibilityTimeoutMs: number = 300000; // 5 minutes — message becomes visible again if not deleted
 
     constructor(connectionString: string) {
-        var self = this;
         this.queueService = createQueueService(connectionString);
         this.queueService.createQueueIfNotExists(this.workflowQueue, (error: Error, result: QueueService.QueueResult, response: ServiceResponse): void => {
             if (error) console.error('[AzureQueueProvider] Failed to create workflow queue:', error.message);
@@ -45,7 +44,7 @@ export class AzureQueueProvider implements IQueueProvider {
         var self = this;
 
         return new Promise<string>((resolve, reject) => {
-            self.queueService.getMessage(queueName, { visibilityTimeoutInSeconds: Math.ceil(this.visibilityTimeoutMs / 1000) }, (error: Error, result: QueueService.QueueMessageResult, response: ServiceResponse): void => {
+            self.queueService.getMessage(queueName, { visibilityTimeout: Math.ceil(this.visibilityTimeoutMs / 1000) }, (error: Error, result: QueueService.QueueMessageResult, response: ServiceResponse): void => {
                 
                 if (!response.isSuccessful) {
                     reject(error.message);

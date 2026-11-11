@@ -29,7 +29,8 @@ export class AzureLockManager implements IDistributedLockProvider {
                     // P4.2: surface the failure instead of swallowing it (was `//TODO: log`). Without the
                     // lock container, acquireLock cannot succeed — and we must NOT arm the renew timer for
                     // a manager that can never hold a lease (P1.1).
-                    console.error(`[AzureLockManager] Failed to ensure lock container '${self.containerId}': ${(error && error.message) || error}`);
+                    // `error` is already known truthy here, so only the message needs guarding.
+                    console.error(`[AzureLockManager] Failed to ensure lock container '${self.containerId}': ${error.message || String(error)}`);
                     resolve();
                     return;
                 }
