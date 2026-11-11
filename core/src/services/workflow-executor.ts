@@ -427,7 +427,11 @@ export class WorkflowExecutor implements IWorkflowExecutor {
         if (instance.nextExecution === null) {            
             for (let pointer of instance.executionPointers.filter(x => x.active && x.children.length > 0)) {
                 
-                if (!instance.executionPointers.filter(x => x.scope.includes(pointer.id)).every(x => !!x.endTime)) 
+                // P0.3: `.every()` is vacuously true on an empty array, so a parent whose
+                // children are all gone (rather than all finished) used to fall through and be
+                // treated as runnable. Require at least one matching child.
+                let matchingChildren = instance.executionPointers.filter(x => x.scope.includes(pointer.id));
+                if (matchingChildren.length === 0 || !matchingChildren.every(x => !!x.endTime)) 
                     continue;
                 
                 if (!pointer.sleepUntil) {

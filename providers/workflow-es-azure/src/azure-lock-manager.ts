@@ -10,23 +10,39 @@ export class AzureLockManager implements IDistributedLockProvider {
     private leaseDuration: number = 60;
     private leases: any = {};
     private renewTimer: any;
+    private ready: Promise<void>;
 
     constructor(connectionString: string) {
         var self = this;
         this.blobService = createBlobService(connectionString);
-        this.blobService.createContainerIfNotExists(this.containerId, (error: Error, result: BlobService.ContainerResult, response: ServiceResponse): void => {
-            if (error) {
-                // P4.2: surface the failure instead of swallowing it (was `//TODO: log`). Without the
-                // lock container, acquireLock cannot succeed — and we must NOT arm the renew timer for
-                // a manager that can never hold a lease (P1.1).
-                console.error(`[AzureLockManager] Failed to ensure lock container '${self.containerId}': ${(error && error.message) || error}`);
-                return;
-            }
-            self.renewTimer = setInterval(self.renewLeases, 45000, self);
+        // P1.1: gate the constructor/acquireLock race behind a promise so an acquireLock()
+        // issued before container creation completes cannot observe a half-initialised manager.
+        //
+        // Deliberately resolves on failure as well as success: the gate exists to wait for the
+        // ATTEMPT to finish, not to propagate the error. Rejecting here would surface as an
+        // unhandled rejection whenever a manager is constructed without anyone awaiting `ready`
+        // (which is the normal case — construction is synchronous), and Node treats that as fatal.
+        // acquireLock() therefore proceeds and fails on its own operation, which is graceful.
+        this.ready = new Promise<void>((resolve) => {
+            this.blobService.createContainerIfNotExists(this.containerId, (error: Error, result: BlobService.ContainerResult, response: ServiceResponse): void => {
+                if (error) {
+                    // P4.2: surface the failure instead of swallowing it (was `//TODO: log`). Without the
+                    // lock container, acquireLock cannot succeed — and we must NOT arm the renew timer for
+                    // a manager that can never hold a lease (P1.1).
+                    // `error` is already known truthy here, so only the message needs guarding.
+                    console.error(`[AzureLockManager] Failed to ensure lock container '${self.containerId}': ${error.message || String(error)}`);
+                    resolve();
+                    return;
+                }
+                this.renewTimer = setInterval(this.renewLeases, 45000, self);
+                resolve();
+            });
         });
     }
 
     public async acquireLock(id: string): Promise<boolean> {
+        // Ensure the lock manager is ready before attempting to acquire locks.
+        await this.ready;
         var self = this;
 
         // M6: `id` arrives tenant-namespaced (`tenant:resourceId`). ':' is not a

@@ -8,14 +8,15 @@ export class AzureQueueProvider implements IQueueProvider {
     private queueService: QueueService;
     private workflowQueue: string = 'workflows';
     private eventQueue: string = 'events';
+    private visibilityTimeoutMs: number = 300000; // 5 minutes — message becomes visible again if not deleted
 
     constructor(connectionString: string) {
         this.queueService = createQueueService(connectionString);
         this.queueService.createQueueIfNotExists(this.workflowQueue, (error: Error, result: QueueService.QueueResult, response: ServiceResponse): void => {
-            //TODO: log
+            if (error) console.error('[AzureQueueProvider] Failed to create workflow queue:', error.message);
         });
         this.queueService.createQueueIfNotExists(this.eventQueue, (error: Error, result: QueueService.QueueResult, response: ServiceResponse): void => {
-            //TODO: log
+            if (error) console.error('[AzureQueueProvider] Failed to create event queue:', error.message);
         });
     }
 
@@ -43,19 +44,18 @@ export class AzureQueueProvider implements IQueueProvider {
         var self = this;
 
         return new Promise<string>((resolve, reject) => {
-            self.queueService.getMessage(queueName, (error: Error, result: QueueService.QueueMessageResult, response: ServiceResponse): void => {
+            self.queueService.getMessage(queueName, { visibilityTimeout: Math.ceil(this.visibilityTimeoutMs / 1000) }, (error: Error, result: QueueService.QueueMessageResult, response: ServiceResponse): void => {
                 
                 if (!response.isSuccessful) {
                     reject(error.message);
+                    return;
                 }
                 
                 if (!result) {
                     resolve(null);
                 }
                 else {
-                    self.queueService.deleteMessage(queueName, result.messageId, result.popReceipt, (error: Error, response: ServiceResponse): void => {
-                        //TODO: log
-                    });
+                    // Message is now invisible for visibilityTimeoutMs — if processing fails/crashes, it becomes visible again.
                     resolve(result.messageText);
                 }
             });

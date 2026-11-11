@@ -64,16 +64,20 @@ export class RedisLockManager implements IDistributedLockProvider {
     }
 
     private renewLeases(): void {
-        this.leases.forEach(async (lock, id) => {
-            try {
-                const extended = await lock.extend(this.leaseDurationMs);
-                this.leases.set(id, extended);
-            }
-            catch {
-                // Lost the lease; drop it so a future acquireLock can re-take it.
-                this.leases.delete(id);
-            }
-        });
+        // Snapshot entries before iterating to avoid undefined behaviour from deleting unvisited entries during forEach.
+        const entries = Array.from(this.leases.entries());
+        for (const [id, lock] of entries) {
+            void (async () => {
+                try {
+                    const extended = await lock.extend(this.leaseDurationMs);
+                    this.leases.set(id, extended);
+                }
+                catch {
+                    // Lost the lease; drop it so a future acquireLock can re-take it.
+                    this.leases.delete(id);
+                }
+            })();
+        }
     }
 
     private resourceKey(id: string): string {
